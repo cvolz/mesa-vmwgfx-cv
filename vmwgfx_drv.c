@@ -1286,7 +1286,8 @@ void __vmw_svga_disable(struct vmw_private *dev_priv)
 	if (dev_priv->bdev.man[TTM_PL_VRAM].use_type) {
 		dev_priv->bdev.man[TTM_PL_VRAM].use_type = false;
 		vmw_write(dev_priv, SVGA_REG_ENABLE,
-			  SVGA_REG_ENABLE_ENABLE_HIDE);
+			  SVGA_REG_ENABLE_HIDE |
+			  SVGA_REG_ENABLE_ENABLE);
 	}
 	spin_unlock(&dev_priv->svga_lock);
 }
@@ -1304,11 +1305,12 @@ void vmw_svga_disable(struct vmw_private *dev_priv)
 	spin_lock(&dev_priv->svga_lock);
 	if (dev_priv->bdev.man[TTM_PL_VRAM].use_type) {
 		dev_priv->bdev.man[TTM_PL_VRAM].use_type = false;
-		vmw_write(dev_priv, SVGA_REG_ENABLE,
-			  SVGA_REG_ENABLE_ENABLE_HIDE);
 		spin_unlock(&dev_priv->svga_lock);
 		if (ttm_bo_evict_mm(&dev_priv->bdev, TTM_PL_VRAM))
 			DRM_ERROR("Failed evicting VRAM buffers.\n");
+		vmw_write(dev_priv, SVGA_REG_ENABLE,
+			  SVGA_REG_ENABLE_HIDE |
+			  SVGA_REG_ENABLE_ENABLE);
 	} else
 		spin_unlock(&dev_priv->svga_lock);
 	ttm_write_unlock(&dev_priv->reservation_sem);

@@ -26,7 +26,7 @@
  ******************************************************************************/
 
 #include "vmwgfx_kms.h"
-#include "svga3d_surfacedefs.h"
+#include "device_include/svga3d_surfacedefs.h"
 
 #define vmw_crtc_to_stdu(x) \
 	container_of(x, struct vmw_screen_target_display_unit, base.crtc)

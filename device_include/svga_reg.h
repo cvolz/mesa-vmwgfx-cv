@@ -1,27 +1,6 @@
-/**********************************************************
- * Copyright 1998-2009 VMware, Inc.  All rights reserved.
- *
- * Permission is hereby granted, free of charge, to any person
- * obtaining a copy of this software and associated documentation
- * files (the "Software"), to deal in the Software without
- * restriction, including without limitation the rights to use, copy,
- * modify, merge, publish, distribute, sublicense, and/or sell copies
- * of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be
- * included in all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
- * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
- * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
- * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
- * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
- * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- *
- **********************************************************/
+/* **********************************************************
+ * Copyright 1998-2014 VMware, Inc.  All rights reserved. -- VMware Confidential
+ * **********************************************************/
 
 /*
  * svga_reg.h --
@@ -33,22 +12,36 @@
 #define _SVGA_REG_H_
 #include <linux/pci_ids.h>
 
-/*
- * PCI device IDs.
- */
-#ifndef PCI_VENDOR_ID_VMWARE
-#define PCI_VENDOR_ID_VMWARE            0x15AD
-#endif
-#define PCI_DEVICE_ID_VMWARE_SVGA2      0x0405
+#define INCLUDE_ALLOW_MODULE
+#define INCLUDE_ALLOW_USERLEVEL
+
+#define INCLUDE_ALLOW_VMCORE
+#include "includeCheck.h"
+
+#include "svga_types.h"
 
 /*
  * SVGA_REG_ENABLE bit definitions.
  */
-#define SVGA_REG_ENABLE_DISABLE     0
-#define SVGA_REG_ENABLE_ENABLE      1
-#define SVGA_REG_ENABLE_HIDE        2
-#define SVGA_REG_ENABLE_ENABLE_HIDE (SVGA_REG_ENABLE_ENABLE |\
-				     SVGA_REG_ENABLE_HIDE)
+typedef enum {
+   SVGA_REG_ENABLE_DISABLE = 0,
+   SVGA_REG_ENABLE_ENABLE = (1 << 0),
+   SVGA_REG_ENABLE_HIDE = (1 << 1),
+} SvgaRegEnable;
+
+typedef uint32 SVGAMobId;
+
+/*
+ * Arbitrary and meaningless limits. Please ignore these when writing
+ * new drivers.
+ */
+#define SVGA_MAX_WIDTH                  2560
+#define SVGA_MAX_HEIGHT                 1600
+
+
+#define SVGA_MAX_BITS_PER_PIXEL         32
+#define SVGA_MAX_DEPTH                  24
+#define SVGA_MAX_DISPLAYS               10
 
 /*
  * Legal values for the SVGA_REG_CURSOR_ON register in old-fashioned
@@ -61,14 +54,9 @@
 #define SVGA_CURSOR_ON_RESTORE_TO_FB   0x3   /* Put the cursor back in the framebuffer so the user can see it */
 
 /*
- * The maximum framebuffer size that can traced for e.g. guests in VESA mode.
- * The changeMap in the monitor is proportional to this number. Therefore, we'd
- * like to keep it as small as possible to reduce monitor overhead (using
- * SVGA_VRAM_MAX_SIZE for this increases the size of the shared area by over
- * 4k!).
- *
- * NB: For compatibility reasons, this value must be greater than 0xff0000.
- *     See bug 335072.
+ * The maximum framebuffer size that can traced for guests unless the
+ * SVGA_CAP_GBOBJECTS is set in SVGA_REG_CAPABILITIES.  In that case
+ * the full framebuffer can be traced independent of this limit.
  */
 #define SVGA_FB_MAX_TRACEABLE_SIZE      0x1000000
 
@@ -137,6 +125,7 @@ enum {
    SVGA_REG_FB_SIZE = 16,
 
    /* ID 0 implementation only had the above registers, then the palette */
+   SVGA_REG_ID_0_TOP = 17,
 
    SVGA_REG_CAPABILITIES = 17,
    SVGA_REG_MEM_START = 18,           /* (Deprecated) */
@@ -177,7 +166,7 @@ enum {
    SVGA_REG_COMMAND_LOW = 48,       /* Lower 32 bits and submits commands */
    SVGA_REG_COMMAND_HIGH = 49,      /* Upper 32 bits of command buffer PA */
    SVGA_REG_MAX_PRIMARY_BOUNDING_BOX_MEM = 50,   /* Max primary memory */
-   SVGA_REG_SUGGESTED_GBOBJECT_MEM_SIZE_KB = 51, /* Suggested limit on mob mem */
+   SVGA_REG_SUGGESTED_GBOBJECT_MEM_SIZE_KB = 51, /* Sugested limit on mob mem */
    SVGA_REG_DEV_CAP = 52,           /* Write dev cap index, read value */
    SVGA_REG_CMD_PREPEND_LOW = 53,
    SVGA_REG_CMD_PREPEND_HIGH = 54,
@@ -188,14 +177,12 @@ enum {
 
    SVGA_PALETTE_BASE = 1024,        /* Base of SVGA color map */
    /* Next 768 (== 256*3) registers exist for colormap */
-
    SVGA_SCRATCH_BASE = SVGA_PALETTE_BASE + SVGA_NUM_PALETTE_REGS
                                     /* Base of scratch registers */
    /* Next reg[SVGA_REG_SCRATCH_SIZE] registers exist for scratch usage:
       First 4 are reserved for VESA BIOS Extension; any remaining are for
       the use of the current SVGA driver. */
 };
-
 
 /*
  * Guest memory regions (GMRs):
@@ -291,19 +278,25 @@ enum {
  * possible.
  */
 #define SVGA_GMR_NULL         ((uint32) -1)
-#define SVGA_GMR_FRAMEBUFFER  ((uint32) -2)  /* Guest Framebuffer (GFB) */
+#define SVGA_GMR_FRAMEBUFFER  ((uint32) -2)  // Guest Framebuffer (GFB)
 
 typedef
+#include "vmware_pack_begin.h"
 struct SVGAGuestMemDescriptor {
    uint32 ppn;
    uint32 numPages;
-} SVGAGuestMemDescriptor;
+}
+#include "vmware_pack_end.h"
+SVGAGuestMemDescriptor;
 
 typedef
+#include "vmware_pack_begin.h"
 struct SVGAGuestPtr {
    uint32 gmrId;
    uint32 offset;
-} SVGAGuestPtr;
+}
+#include "vmware_pack_end.h"
+SVGAGuestPtr;
 
 /*
  * Register based command buffers --
@@ -435,9 +428,10 @@ typedef enum {
 } SVGACBFlags;
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
-   volatile SVGACBStatus status; /* Modified by device. */
-   volatile uint32 errorOffset;  /* Modified by device. */
+   volatile SVGACBStatus status;
+   volatile uint32 errorOffset;
    uint64 id;
    SVGACBFlags flags;
    uint32 length;
@@ -448,13 +442,11 @@ struct {
          uint32 mobOffset;
       } mob;
    } ptr;
-   uint32 offset; /* Valid if CMD_BUFFERS_2 cap set, must be zero otherwise,
-                   * modified by device.
-                   */
+   uint32 offset; /* Valid if CMD_BUFFERS_2 cap set, must be zero otherwise */
    uint32 dxContext; /* Valid if DX_CONTEXT flag set, must be zero otherwise */
    uint32 mustBeZero[6];
 }
-__attribute__((__packed__))
+#include "vmware_pack_end.h"
 SVGACBHeader;
 
 typedef enum {
@@ -462,8 +454,8 @@ typedef enum {
    SVGA_DC_CMD_START_STOP_CONTEXT    = 1,
    SVGA_DC_CMD_PREEMPT               = 2,
    SVGA_DC_CMD_MAX                   = 3,
+   SVGA_DC_CMD_FORCE_UINT            = MAX_UINT32,
 } SVGADeviceContextCmdId;
-
 
 typedef struct {
    uint32 enable;
@@ -489,7 +481,6 @@ typedef struct {
    uint32 ignoreIDZero;
 } SVGADCCmdPreempt;
 
-
 /*
  * SVGAGMRImageFormat --
  *
@@ -510,13 +501,12 @@ typedef struct {
  *
  */
 
-typedef
-struct SVGAGMRImageFormat {
+typedef struct SVGAGMRImageFormat {
    union {
       struct {
          uint32 bitsPerPixel : 8;
          uint32 colorDepth   : 8;
-         uint32 reserved     : 16;  /* Must be zero */
+         uint32 reserved     : 16;  // Must be zero
       };
 
       uint32 value;
@@ -524,6 +514,7 @@ struct SVGAGMRImageFormat {
 } SVGAGMRImageFormat;
 
 typedef
+#include "vmware_pack_begin.h"
 struct SVGAGuestImage {
    SVGAGuestPtr         ptr;
 
@@ -543,7 +534,9 @@ struct SVGAGuestImage {
     * assuming each row of blocks is tightly packed.
     */
    uint32 pitch;
-} SVGAGuestImage;
+}
+#include "vmware_pack_end.h"
+SVGAGuestImage;
 
 /*
  * SVGAColorBGRX --
@@ -553,14 +546,13 @@ struct SVGAGuestImage {
  *    GMRFB state.
  */
 
-typedef
-struct SVGAColorBGRX {
+typedef struct SVGAColorBGRX {
    union {
       struct {
          uint32 b : 8;
          uint32 g : 8;
          uint32 r : 8;
-         uint32 x : 8;  /* Unused */
+         uint32 x : 8;  // Unused
       };
 
       uint32 value;
@@ -582,26 +574,49 @@ struct SVGAColorBGRX {
  */
 
 typedef
-struct SVGASignedRect {
+#include "vmware_pack_begin.h"
+struct {
    int32  left;
    int32  top;
    int32  right;
    int32  bottom;
-} SVGASignedRect;
+}
+#include "vmware_pack_end.h"
+SVGASignedRect;
 
 typedef
-struct SVGASignedPoint {
+#include "vmware_pack_begin.h"
+struct {
    int32  x;
    int32  y;
-} SVGASignedPoint;
+}
+#include "vmware_pack_end.h"
+SVGASignedPoint;
 
 
 /*
- *  Capabilities
+ * SVGA Device Capabilities
  *
- *  Note the holes in the bitfield. Missing bits have been deprecated,
- *  and must not be reused. Those capabilities will never be reported
- *  by new versions of the SVGA device.
+ * Note the holes in the bitfield. Missing bits have been deprecated,
+ * and must not be reused. Those capabilities will never be reported
+ * by new versions of the SVGA device.
+ *
+ * XXX: Add longer descriptions for each capability, including a list
+ *      of the new features that each capability provides.
+ *
+ * SVGA_CAP_IRQMASK --
+ *    Provides device interrupts.  Adds device register SVGA_REG_IRQMASK
+ *    to set interrupt mask and direct I/O port SVGA_IRQSTATUS_PORT to
+ *    set/clear pending interrupts.
+ *
+ * SVGA_CAP_GMR --
+ *    Provides synchronous mapping of guest memory regions (GMR).
+ *    Adds device registers SVGA_REG_GMR_ID, SVGA_REG_GMR_DESCRIPTOR,
+ *    SVGA_REG_GMR_MAX_IDS, and SVGA_REG_GMR_MAX_DESCRIPTOR_LENGTH.
+ *
+ * SVGA_CAP_TRACES --
+ *    Allows framebuffer trace-based updates even when FIFO is enabled.
+ *    Adds device register SVGA_REG_TRACES.
  *
  * SVGA_CAP_GMR2 --
  *    Provides asynchronous commands to define and remap guest memory
@@ -611,21 +626,39 @@ struct SVGASignedPoint {
  * SVGA_CAP_SCREEN_OBJECT_2 --
  *    Allow screen object support, and require backing stores from the
  *    guest for each screen object.
+ *
+ * SVGA_CAP_COMMAND_BUFFERS --
+ *    Enable register based command buffer submission.
+ *
+ * SVGA_CAP_DEAD1 --
+ *    This cap was incorrectly used by old drivers and should not be
+ *    reused.
+ *
+ * SVGA_CAP_CMD_BUFFERS_2 --
+ *    Enable support for the prepend command buffer submision
+ *    registers.  SVGA_REG_CMD_PREPEND_LOW and
+ *    SVGA_REG_CMD_PREPEND_HIGH.
+ *
+ * SVGA_CAP_GBOBJECTS --
+ *    Enable guest-backed objects and surfaces.
+ *
+ * SVGA_CAP_CMD_BUFFERS_3 --
+ *    Enable support for command buffers in a mob.
  */
 
 #define SVGA_CAP_NONE               0x00000000
 #define SVGA_CAP_RECT_COPY          0x00000002
 #define SVGA_CAP_CURSOR             0x00000020
-#define SVGA_CAP_CURSOR_BYPASS      0x00000040   /* Legacy (Use Cursor Bypass 3 instead) */
-#define SVGA_CAP_CURSOR_BYPASS_2    0x00000080   /* Legacy (Use Cursor Bypass 3 instead) */
+#define SVGA_CAP_CURSOR_BYPASS      0x00000040   // Legacy (Use Cursor Bypass 3 instead)
+#define SVGA_CAP_CURSOR_BYPASS_2    0x00000080   // Legacy (Use Cursor Bypass 3 instead)
 #define SVGA_CAP_8BIT_EMULATION     0x00000100
 #define SVGA_CAP_ALPHA_CURSOR       0x00000200
 #define SVGA_CAP_3D                 0x00004000
 #define SVGA_CAP_EXTENDED_FIFO      0x00008000
-#define SVGA_CAP_MULTIMON           0x00010000   /* Legacy multi-monitor support */
+#define SVGA_CAP_MULTIMON           0x00010000   // Legacy multi-monitor support
 #define SVGA_CAP_PITCHLOCK          0x00020000
 #define SVGA_CAP_IRQMASK            0x00040000
-#define SVGA_CAP_DISPLAY_TOPOLOGY   0x00080000   /* Legacy multi-monitor support */
+#define SVGA_CAP_DISPLAY_TOPOLOGY   0x00080000   // Legacy multi-monitor support
 #define SVGA_CAP_GMR                0x00100000
 #define SVGA_CAP_TRACES             0x00200000
 #define SVGA_CAP_GMR2               0x00400000
@@ -635,6 +668,32 @@ struct SVGASignedPoint {
 #define SVGA_CAP_CMD_BUFFERS_2      0x04000000
 #define SVGA_CAP_GBOBJECTS          0x08000000
 #define SVGA_CAP_CMD_BUFFERS_3      0x10000000
+
+#define SVGA_CAP_CMD_RESERVED       0x80000000
+
+
+/*
+ * The Guest can optionally read some SVGA device capabilities through
+ * the backdoor with command BDOOR_CMD_GET_SVGA_CAPABILITIES before
+ * the SVGA device is initialized.  The type of capability the guest
+ * is requesting from the SVGABackdoorCapType enum should be placed in
+ * the upper 16 bits of the backdoor command id (ECX).  On success the
+ * the value of EBX will be set to BDOOR_MAGIC and EAX will be set to
+ * the requested capability.  If the command is not supported then EBX
+ * will be left unchanged and EAX will be set to -1.  Because it is
+ * possible that -1 is the value of the requested cap the correct way
+ * to check if the command was successful is to check if EBX was changed
+ * to BDOOR_MAGIC making sure to initialize the register to something
+ * else first.
+ */
+
+typedef enum {
+   SVGABackdoorCapDeviceCaps = 0,
+   SVGABackdoorCapFifoCaps = 1,
+   SVGABackdoorCap3dHWVersion = 2,
+   SVGABackdoorCapMax = 3,
+} SVGABackdoorCapType;
+
 
 /*
  * FIFO register indices.
@@ -678,7 +737,7 @@ enum {
 
    SVGA_FIFO_CAPABILITIES = 4,
    SVGA_FIFO_FLAGS,
-   /* Valid with SVGA_FIFO_CAP_FENCE: */
+   // Valid with SVGA_FIFO_CAP_FENCE:
    SVGA_FIFO_FENCE,
 
    /*
@@ -691,19 +750,19 @@ enum {
     * extended FIFO.
     */
 
-   /* Valid if exists (i.e. if extended FIFO enabled): */
+   // Valid if exists (i.e. if extended FIFO enabled):
    SVGA_FIFO_3D_HWVERSION,       /* See SVGA3dHardwareVersion in svga3d_reg.h */
-   /* Valid with SVGA_FIFO_CAP_PITCHLOCK: */
+   // Valid with SVGA_FIFO_CAP_PITCHLOCK:
    SVGA_FIFO_PITCHLOCK,
 
-   /* Valid with SVGA_FIFO_CAP_CURSOR_BYPASS_3: */
+   // Valid with SVGA_FIFO_CAP_CURSOR_BYPASS_3:
    SVGA_FIFO_CURSOR_ON,          /* Cursor bypass 3 show/hide register */
    SVGA_FIFO_CURSOR_X,           /* Cursor bypass 3 x register */
    SVGA_FIFO_CURSOR_Y,           /* Cursor bypass 3 y register */
    SVGA_FIFO_CURSOR_COUNT,       /* Incremented when any of the other 3 change */
    SVGA_FIFO_CURSOR_LAST_UPDATED,/* Last time the host updated the cursor */
 
-   /* Valid with SVGA_FIFO_CAP_RESERVE: */
+   // Valid with SVGA_FIFO_CAP_RESERVE:
    SVGA_FIFO_RESERVED,           /* Bytes past NEXT_CMD with real contents */
 
    /*
@@ -769,7 +828,7 @@ enum {
     * sets SVGA_FIFO_MIN high enough to leave room for them.
     */
 
-   /* Valid if register exists: */
+   // Valid if register exists:
    SVGA_FIFO_GUEST_3D_HWVERSION, /* Guest driver's 3D version */
    SVGA_FIFO_FENCE_GOAL,         /* Matching target for SVGA_IRQFLAG_FENCE_GOAL */
    SVGA_FIFO_BUSY,               /* See "FIFO Synchronization Registers" */
@@ -1026,7 +1085,7 @@ enum {
 
 #define SVGA_FIFO_FLAG_NONE                 0
 #define SVGA_FIFO_FLAG_ACCELFRONT       (1<<0)
-#define SVGA_FIFO_FLAG_RESERVED        (1<<31) /* Internal use only */
+#define SVGA_FIFO_FLAG_RESERVED        (1<<31) // Internal use only
 
 /*
  * FIFO reservation sentinel value
@@ -1059,22 +1118,22 @@ enum {
    SVGA_VIDEO_DATA_OFFSET,
    SVGA_VIDEO_FORMAT,
    SVGA_VIDEO_COLORKEY,
-   SVGA_VIDEO_SIZE,          /* Deprecated */
+   SVGA_VIDEO_SIZE,          // Deprecated
    SVGA_VIDEO_WIDTH,
    SVGA_VIDEO_HEIGHT,
    SVGA_VIDEO_SRC_X,
    SVGA_VIDEO_SRC_Y,
    SVGA_VIDEO_SRC_WIDTH,
    SVGA_VIDEO_SRC_HEIGHT,
-   SVGA_VIDEO_DST_X,         /* Signed int32 */
-   SVGA_VIDEO_DST_Y,         /* Signed int32 */
+   SVGA_VIDEO_DST_X,         // Signed int32
+   SVGA_VIDEO_DST_Y,         // Signed int32
    SVGA_VIDEO_DST_WIDTH,
    SVGA_VIDEO_DST_HEIGHT,
    SVGA_VIDEO_PITCH_1,
    SVGA_VIDEO_PITCH_2,
    SVGA_VIDEO_PITCH_3,
-   SVGA_VIDEO_DATA_GMRID,    /* Optional, defaults to SVGA_GMR_FRAMEBUFFER */
-   SVGA_VIDEO_DST_SCREEN_ID, /* Optional, defaults to virtual coords (SVGA_ID_INVALID) */
+   SVGA_VIDEO_DATA_GMRID,    // Optional, defaults to SVGA_GMR_FRAMEBUFFER
+   SVGA_VIDEO_DST_SCREEN_ID, // Optional, defaults to virtual coords (SVGA_ID_INVALID)
    SVGA_VIDEO_NUM_REGS
 };
 
@@ -1087,7 +1146,9 @@ enum {
  *      video frame to be displayed.
  */
 
-typedef struct SVGAOverlayUnit {
+typedef
+#include "vmware_pack_begin.h"
+struct SVGAOverlayUnit {
    uint32 enabled;
    uint32 flags;
    uint32 dataOffset;
@@ -1107,7 +1168,27 @@ typedef struct SVGAOverlayUnit {
    uint32 pitches[3];
    uint32 dataGMRId;
    uint32 dstScreenId;
-} SVGAOverlayUnit;
+}
+#include "vmware_pack_end.h"
+SVGAOverlayUnit;
+
+
+/*
+ * Guest display topology
+ *
+ * XXX: This structure is not part of the SVGA device's interface, and
+ * doesn't really belong here.
+ */
+#define SVGA_INVALID_DISPLAY_ID ((uint32)-1)
+
+typedef struct SVGADisplayTopology {
+   uint16 displayId;
+   uint16 isPrimary;
+   uint32 width;
+   uint32 height;
+   uint32 positionX;
+   uint32 positionY;
+} SVGADisplayTopology;
 
 
 /*
@@ -1142,10 +1223,10 @@ typedef struct SVGAOverlayUnit {
  *    value of zero means no cloning should happen.
  */
 
-#define SVGA_SCREEN_MUST_BE_SET     (1 << 0) /* Must be set or results undefined */
-#define SVGA_SCREEN_HAS_ROOT SVGA_SCREEN_MUST_BE_SET /* Deprecated */
-#define SVGA_SCREEN_IS_PRIMARY      (1 << 1) /* Guest considers this screen to be 'primary' */
-#define SVGA_SCREEN_FULLSCREEN_HINT (1 << 2) /* Guest is running a fullscreen app here */
+#define SVGA_SCREEN_MUST_BE_SET     (1 << 0) // Must be set or results undefined
+#define SVGA_SCREEN_HAS_ROOT SVGA_SCREEN_MUST_BE_SET // Deprecated
+#define SVGA_SCREEN_IS_PRIMARY      (1 << 1) // Guest considers this screen to be 'primary'
+#define SVGA_SCREEN_FULLSCREEN_HINT (1 << 2)  // Guest is running a fullscreen app here
 
 /*
  * Added with SVGA_FIFO_CAP_SCREEN_OBJECT_2.  When the screen is
@@ -1168,8 +1249,9 @@ typedef struct SVGAOverlayUnit {
 #define SVGA_SCREEN_BLANKING (1 << 4)
 
 typedef
-struct SVGAScreenObject {
-   uint32 structSize;   /* sizeof(SVGAScreenObject) */
+#include "vmware_pack_begin.h"
+struct {
+   uint32 structSize;   // sizeof(SVGAScreenObject)
    uint32 id;
    uint32 flags;
    struct {
@@ -1186,8 +1268,17 @@ struct SVGAScreenObject {
     * with SVGA_FIFO_CAP_SCREEN_OBJECT.
     */
    SVGAGuestImage backingStore;
+
+   /*
+    * The cloneCount field is treated as a hint from the guest that
+    * the user wants this display to be cloned, cloneCount times.
+    *
+    * A value of zero means no cloning should happen.
+    */
    uint32 cloneCount;
-} SVGAScreenObject;
+}
+#include "vmware_pack_end.h"
+SVGAScreenObject;
 
 
 /*
@@ -1200,7 +1291,7 @@ struct SVGAScreenObject {
  *  Note the holes in the command ID numbers: These commands have been
  *  deprecated, and the old IDs must not be reused.
  *
- *  Command IDs from 1000 to 1999 are reserved for use by the SVGA3D
+ *  Command IDs from 1000 to 2999 are reserved for use by the SVGA3D
  *  protocol.
  *
  *  Each command's parameters are described by the comments and
@@ -1211,6 +1302,7 @@ typedef enum {
    SVGA_CMD_INVALID_CMD           = 0,
    SVGA_CMD_UPDATE                = 1,
    SVGA_CMD_RECT_COPY             = 3,
+   SVGA_CMD_RECT_ROP_COPY         = 14,
    SVGA_CMD_DEFINE_CURSOR         = 19,
    SVGA_CMD_DEFINE_ALPHA_CURSOR   = 22,
    SVGA_CMD_UPDATE_VERBOSE        = 25,
@@ -1226,9 +1318,14 @@ typedef enum {
    SVGA_CMD_ANNOTATION_COPY       = 40,
    SVGA_CMD_DEFINE_GMR2           = 41,
    SVGA_CMD_REMAP_GMR2            = 42,
+   SVGA_CMD_DEAD                  = 43,
+   SVGA_CMD_DEAD_2                = 44,
+   SVGA_CMD_NOP                   = 45,
+   SVGA_CMD_NOP_ERROR             = 46,
    SVGA_CMD_MAX
 } SVGAFifoCmdId;
 
+#define SVGA_CMD_MAX_DATASIZE       (256 * 1024)
 #define SVGA_CMD_MAX_ARGS           64
 
 
@@ -1261,12 +1358,15 @@ typedef enum {
  */
 
 typedef
-struct SVGAFifoCmdUpdate {
+#include "vmware_pack_begin.h"
+struct {
    uint32 x;
    uint32 y;
    uint32 width;
    uint32 height;
-} SVGAFifoCmdUpdate;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdUpdate;
 
 
 /*
@@ -1280,14 +1380,44 @@ struct SVGAFifoCmdUpdate {
  */
 
 typedef
-struct SVGAFifoCmdRectCopy {
+#include "vmware_pack_begin.h"
+struct {
    uint32 srcX;
    uint32 srcY;
    uint32 destX;
    uint32 destY;
    uint32 width;
    uint32 height;
-} SVGAFifoCmdRectCopy;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdRectCopy;
+
+
+/*
+ * SVGA_CMD_RECT_ROP_COPY --
+ *
+ *    Perform a rectangular DMA transfer from one area of the GFB to
+ *    another, and copy the result to any screens which intersect it.
+ *    The value of ROP may only be SVGA_ROP_COPY, and this command is
+ *    only supported for backwards compatibility reasons.
+ *
+ * Availability:
+ *    SVGA_CAP_RECT_COPY
+ */
+
+typedef
+#include "vmware_pack_begin.h"
+struct {
+   uint32 srcX;
+   uint32 srcY;
+   uint32 destX;
+   uint32 destY;
+   uint32 width;
+   uint32 height;
+   uint32 rop;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdRectRopCopy;
 
 
 /*
@@ -1304,19 +1434,22 @@ struct SVGAFifoCmdRectCopy {
  */
 
 typedef
-struct SVGAFifoCmdDefineCursor {
-   uint32 id;             /* Reserved, must be zero. */
+#include "vmware_pack_begin.h"
+struct {
+   uint32 id;             // Reserved, must be zero.
    uint32 hotspotX;
    uint32 hotspotY;
    uint32 width;
    uint32 height;
-   uint32 andMaskDepth;   /* Value must be 1 or equal to BITS_PER_PIXEL */
-   uint32 xorMaskDepth;   /* Value must be 1 or equal to BITS_PER_PIXEL */
+   uint32 andMaskDepth;   // Value must be 1 or equal to BITS_PER_PIXEL
+   uint32 xorMaskDepth;   // Value must be 1 or equal to BITS_PER_PIXEL
    /*
     * Followed by scanline data for AND mask, then XOR mask.
     * Each scanline is padded to a 32-bit boundary.
    */
-} SVGAFifoCmdDefineCursor;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdDefineCursor;
 
 
 /*
@@ -1333,14 +1466,17 @@ struct SVGAFifoCmdDefineCursor {
  */
 
 typedef
-struct SVGAFifoCmdDefineAlphaCursor {
-   uint32 id;             /* Reserved, must be zero. */
+#include "vmware_pack_begin.h"
+struct {
+   uint32 id;             // Reserved, must be zero.
    uint32 hotspotX;
    uint32 hotspotY;
    uint32 width;
    uint32 height;
    /* Followed by scanline data */
-} SVGAFifoCmdDefineAlphaCursor;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdDefineAlphaCursor;
 
 
 /*
@@ -1356,13 +1492,16 @@ struct SVGAFifoCmdDefineAlphaCursor {
  */
 
 typedef
-struct SVGAFifoCmdUpdateVerbose {
+#include "vmware_pack_begin.h"
+struct {
    uint32 x;
    uint32 y;
    uint32 width;
    uint32 height;
    uint32 reason;
-} SVGAFifoCmdUpdateVerbose;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdUpdateVerbose;
 
 
 /*
@@ -1381,14 +1520,17 @@ struct SVGAFifoCmdUpdateVerbose {
 #define  SVGA_ROP_COPY                    0x03
 
 typedef
-struct SVGAFifoCmdFrontRopFill {
-   uint32 color;     /* In the same format as the GFB */
+#include "vmware_pack_begin.h"
+struct {
+   uint32 color;     // In the same format as the GFB
    uint32 x;
    uint32 y;
    uint32 width;
    uint32 height;
-   uint32 rop;       /* Must be SVGA_ROP_COPY */
-} SVGAFifoCmdFrontRopFill;
+   uint32 rop;       // Must be SVGA_ROP_COPY
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdFrontRopFill;
 
 
 /*
@@ -1407,9 +1549,12 @@ struct SVGAFifoCmdFrontRopFill {
  */
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
    uint32 fence;
-} SVGAFifoCmdFence;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdFence;
 
 
 /*
@@ -1424,11 +1569,14 @@ struct {
  */
 
 typedef
-struct SVGAFifoCmdEscape {
+#include "vmware_pack_begin.h"
+struct {
    uint32 nsid;
    uint32 size;
    /* followed by 'size' bytes of data */
-} SVGAFifoCmdEscape;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdEscape;
 
 
 /*
@@ -1458,9 +1606,12 @@ struct SVGAFifoCmdEscape {
  */
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
-   SVGAScreenObject screen;   /* Variable-length according to version */
-} SVGAFifoCmdDefineScreen;
+   SVGAScreenObject screen;   // Variable-length according to version
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdDefineScreen;
 
 
 /*
@@ -1474,9 +1625,12 @@ struct {
  */
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
    uint32 screenId;
-} SVGAFifoCmdDestroyScreen;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdDestroyScreen;
 
 
 /*
@@ -1527,11 +1681,14 @@ struct {
  */
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
    SVGAGuestPtr        ptr;
    uint32              bytesPerLine;
    SVGAGMRImageFormat  format;
-} SVGAFifoCmdDefineGMRFB;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdDefineGMRFB;
 
 
 /*
@@ -1539,19 +1696,10 @@ struct {
  *
  *    This is a guest-to-host blit. It performs a DMA operation to
  *    copy a rectangular region of pixels from the current GMRFB to
- *    one or more Screen Objects.
+ *    a ScreenObject.
  *
  *    The destination coordinate may be specified relative to a
- *    screen's origin (if a screen ID is specified) or relative to the
- *    virtual coordinate system's origin (if the screen ID is
- *    SVGA_ID_INVALID). The actual destination may span zero or more
- *    screens, in the case of a virtual destination rect or a rect
- *    which extends off the edge of the specified screen.
- *
- *    This command writes to the screen's "base layer": the underlying
- *    framebuffer which exists below any cursor or video overlays. No
- *    action is necessary to explicitly hide or update any overlays
- *    which exist on top of the updated region.
+ *    screen's origin.  The provided screen ID must be valid.
  *
  *    The SVGA device is guaranteed to finish reading from the GMRFB
  *    by the time any subsequent FENCE commands are reached.
@@ -1564,45 +1712,26 @@ struct {
  */
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
    SVGASignedPoint  srcOrigin;
    SVGASignedRect   destRect;
    uint32           destScreenId;
-} SVGAFifoCmdBlitGMRFBToScreen;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdBlitGMRFBToScreen;
 
 
 /*
  * SVGA_CMD_BLIT_SCREEN_TO_GMRFB --
  *
  *    This is a host-to-guest blit. It performs a DMA operation to
- *    copy a rectangular region of pixels from a single Screen Object
+ *    copy a rectangular region of pixels from a single ScreenObject
  *    back to the current GMRFB.
  *
- *    Usage note: This command should be used rarely. It will
- *    typically be inefficient, but it is necessary for some types of
- *    synchronization between 3D (GPU) and 2D (CPU) rendering into
- *    overlapping areas of a screen.
- *
  *    The source coordinate is specified relative to a screen's
- *    origin. The provided screen ID must be valid. If any parameters
+ *    origin.  The provided screen ID must be valid. If any parameters
  *    are invalid, the resulting pixel values are undefined.
- *
- *    This command reads the screen's "base layer". Overlays like
- *    video and cursor are not included, but any data which was sent
- *    using a blit-to-screen primitive will be available, no matter
- *    whether the data's original source was the GMRFB or the 3D
- *    acceleration hardware.
- *
- *    Note that our guest-to-host blits and host-to-guest blits aren't
- *    symmetric in their current implementation. While the parameters
- *    are identical, host-to-guest blits are a lot less featureful.
- *    They do not support clipping: If the source parameters don't
- *    fully fit within a screen, the blit fails. They must originate
- *    from exactly one screen. Virtual coordinates are not directly
- *    supported.
- *
- *    Host-to-guest blits do support the same set of GMRFB formats
- *    offered by guest-to-host blits.
  *
  *    The SVGA device is guaranteed to finish writing to the GMRFB by
  *    the time any subsequent FENCE commands are reached.
@@ -1612,77 +1741,57 @@ struct {
  */
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
    SVGASignedPoint  destOrigin;
    SVGASignedRect   srcRect;
    uint32           srcScreenId;
-} SVGAFifoCmdBlitScreenToGMRFB;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdBlitScreenToGMRFB;
 
 
 /*
  * SVGA_CMD_ANNOTATION_FILL --
  *
- *    This is a blit annotation. This command stores a small piece of
- *    device state which is consumed by the next blit-to-screen
- *    command. The state is only cleared by commands which are
- *    specifically documented as consuming an annotation. Other
- *    commands (such as ESCAPEs for debugging) may intervene between
- *    the annotation and its associated blit.
- *
- *    This annotation is a promise about the contents of the next
- *    blit: The video driver is guaranteeing that all pixels in that
- *    blit will have the same value, specified here as a color in
- *    SVGAColorBGRX format.
- *
- *    The SVGA device can still render the blit correctly even if it
- *    ignores this annotation, but the annotation may allow it to
- *    perform the blit more efficiently, for example by ignoring the
- *    source data and performing a fill in hardware.
- *
- *    This annotation is most important for performance when the
- *    user's display is being remoted over a network connection.
+ *    The annotation commands have been deprecated, should not be used
+ *    by new drivers.  They used to provide performance hints to the SVGA
+ *    device about the content of screen updates, but newer SVGA devices
+ *    ignore these.
  *
  * Availability:
  *    SVGA_FIFO_CAP_SCREEN_OBJECT or SVGA_FIFO_CAP_SCREEN_OBJECT_2
  */
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
    SVGAColorBGRX  color;
-} SVGAFifoCmdAnnotationFill;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdAnnotationFill;
 
 
 /*
  * SVGA_CMD_ANNOTATION_COPY --
  *
- *    This is a blit annotation. See SVGA_CMD_ANNOTATION_FILL for more
- *    information about annotations.
- *
- *    This annotation is a promise about the contents of the next
- *    blit: The video driver is guaranteeing that all pixels in that
- *    blit will have the same value as those which already exist at an
- *    identically-sized region on the same or a different screen.
- *
- *    Note that the source pixels for the COPY in this annotation are
- *    sampled before applying the anqnotation's associated blit. They
- *    are allowed to overlap with the blit's destination pixels.
- *
- *    The copy source rectangle is specified the same way as the blit
- *    destination: it can be a rectangle which spans zero or more
- *    screens, specified relative to either a screen or to the virtual
- *    coordinate system's origin. If the source rectangle includes
- *    pixels which are not from exactly one screen, the results are
- *    undefined.
+ *    The annotation commands have been deprecated, should not be used
+ *    by new drivers.  They used to provide performance hints to the SVGA
+ *    device about the content of screen updates, but newer SVGA devices
+ *    ignore these.
  *
  * Availability:
  *    SVGA_FIFO_CAP_SCREEN_OBJECT or SVGA_FIFO_CAP_SCREEN_OBJECT_2
  */
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
    SVGASignedPoint  srcOrigin;
    uint32           srcScreenId;
-} SVGAFifoCmdAnnotationCopy;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdAnnotationCopy;
 
 
 /*
@@ -1695,10 +1804,13 @@ struct {
  */
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
    uint32 gmrId;
    uint32 numPages;
-} SVGAFifoCmdDefineGMR2;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdDefineGMR2;
 
 
 /*
@@ -1737,11 +1849,12 @@ typedef enum {
 } SVGARemapGMR2Flags;
 
 typedef
+#include "vmware_pack_begin.h"
 struct {
    uint32 gmrId;
    SVGARemapGMR2Flags flags;
-   uint32 offsetPages; /* offset in pages to begin remap */
-   uint32 numPages; /* number of pages to remap */
+   uint32 offsetPages; // offset in pages to begin remap
+   uint32 numPages; // number of pages to remap
    /*
     * Followed by additional data depending on SVGARemapGMR2Flags.
     *
@@ -1750,6 +1863,52 @@ struct {
     * (according to flag SVGA_REMAP_GMR2_PPN64) follows.  If flag
     * SVGA_REMAP_GMR2_SINGLE_PPN is set, array contains a single entry.
     */
-} SVGAFifoCmdRemapGMR2;
+}
+#include "vmware_pack_end.h"
+SVGAFifoCmdRemapGMR2;
+
+
+/*
+ * Size of SVGA device memory such as frame buffer and FIFO.
+ */
+#define SVGA_VRAM_MIN_SIZE             (4 * 640 * 480) // bytes
+#define SVGA_VRAM_MIN_SIZE_3D       (16 * 1024 * 1024)
+#define SVGA_VRAM_MAX_SIZE         (128 * 1024 * 1024)
+#define SVGA_MEMORY_SIZE_MAX      (1024 * 1024 * 1024)
+#define SVGA_FIFO_SIZE_MAX           (2 * 1024 * 1024)
+#define SVGA_GRAPHICS_MEMORY_KB_MIN       (32 * 1024)
+#define SVGA_GRAPHICS_MEMORY_KB_MAX       (2 * 1024 * 1024)
+#define SVGA_GRAPHICS_MEMORY_KB_DEFAULT   (256 * 1024)
+
+#define SVGA_VRAM_SIZE_W2K          (64 * 1024 * 1024) // 64 MB
+
+/*
+ * To simplify autoDetect display configuration, support a minimum of
+ * two 1920x1200 monitors, 32bpp, side-by-side, optionally rotated:
+ *   numDisplays = 2
+ *   maxWidth = numDisplay * 1920 = 3840
+ *   maxHeight = rotated width of single monitor = 1920
+ *   vramSize = maxWidth * maxHeight * 4 = 29491200
+ */
+#define SVGA_VRAM_SIZE_AUTODETECT   (32 * 1024 * 1024)
+
+#if defined(VMX86_SERVER)
+#define SVGA_VRAM_SIZE               (4 * 1024 * 1024)
+#define SVGA_VRAM_SIZE_3D           (64 * 1024 * 1024)
+#define SVGA_FIFO_SIZE                    (256 * 1024)
+#define SVGA_FIFO_SIZE_3D                 (516 * 1024) // Bump to 516KB to workaround WDDM driver issue (see bug# 744318)
+#define SVGA_MEMORY_SIZE_DEFAULT   (160 * 1024 * 1024)
+#define SVGA_AUTODETECT_DEFAULT                  FALSE
+#else
+#define SVGA_VRAM_SIZE              (16 * 1024 * 1024)
+#define SVGA_VRAM_SIZE_3D           SVGA_VRAM_MAX_SIZE
+#define SVGA_FIFO_SIZE               (2 * 1024 * 1024)
+#define SVGA_FIFO_SIZE_3D               SVGA_FIFO_SIZE
+#define SVGA_MEMORY_SIZE_DEFAULT   (768 * 1024 * 1024)
+#define SVGA_AUTODETECT_DEFAULT                   TRUE
+#endif
+
+#define SVGA_FIFO_SIZE_GBOBJECTS          (256 * 1024)
+#define SVGA_VRAM_SIZE_GBOBJECTS     (4 * 1024 * 1024)
 
 #endif
