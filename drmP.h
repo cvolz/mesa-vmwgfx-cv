@@ -1148,6 +1148,7 @@ static __inline__ int drm_core_check_feature(struct drm_device *dev,
 	return ((dev->driver->driver_features & feature) ? 1 : 0);
 }
 
+
 static inline int drm_get_pci_domain(struct drm_device *dev)
 {
 #ifndef __alpha__
@@ -1231,6 +1232,7 @@ static inline bool drm_is_primary_client(const struct drm_file *file_priv)
 				/* Driver support (drm_drv.h) */
 extern int drm_init(struct drm_driver *driver);
 extern void drm_exit(struct drm_driver *driver);
+extern int drm_ioctl_permit(u32 flags, struct drm_file *file_priv);
 extern long drm_ioctl(struct file *filp,
 		      unsigned int cmd, unsigned long arg);
 extern long drm_compat_ioctl(struct file *filp,
