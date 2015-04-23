@@ -262,14 +262,10 @@ out_err:
 static void vmw_gmr_fire_descriptors(struct vmw_private *dev_priv,
 				     int gmr_id, dma_addr_t desc_dma)
 {
-	mutex_lock(&dev_priv->hw_mutex);
-
 	vmw_write(dev_priv, SVGA_REG_GMR_ID, gmr_id);
 	wmb();
 	vmw_write(dev_priv, SVGA_REG_GMR_DESCRIPTOR, desc_dma >> PAGE_SHIFT);
 	mb();
-
-	mutex_unlock(&dev_priv->hw_mutex);
 }
 
 int vmw_gmr_bind(struct vmw_private *dev_priv,
@@ -319,10 +315,8 @@ void vmw_gmr_unbind(struct vmw_private *dev_priv, int gmr_id)
 		return;
 	}
 
-	mutex_lock(&dev_priv->hw_mutex);
 	vmw_write(dev_priv, SVGA_REG_GMR_ID, gmr_id);
 	wmb();
 	vmw_write(dev_priv, SVGA_REG_GMR_DESCRIPTOR, 0);
 	mb();
-	mutex_unlock(&dev_priv->hw_mutex);
 }
