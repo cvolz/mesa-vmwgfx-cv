@@ -1923,8 +1923,6 @@ struct {
  * Guest-backed surface definitions.
  */
 
-typedef uint32 SVGAMobId;
-
 typedef enum SVGAMobFormat {
    SVGA3D_MOBFMT_INVALID = SVGA3D_INVALID_ID,
    SVGA3D_MOBFMT_PTDEPTH_0 = 0,
