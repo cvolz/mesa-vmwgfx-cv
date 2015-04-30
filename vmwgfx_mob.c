@@ -195,7 +195,8 @@ static void vmw_takedown_otable_base(struct vmw_private *dev_priv,
 
 	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd));
 	if (unlikely(cmd == NULL)) {
-		DRM_ERROR("Failed reserving FIFO space for OTable setup.\n");
+		DRM_ERROR("Failed reserving FIFO space for OTable takedown.\n");
+		return;
 	}
 
 	memset(cmd, 0, sizeof(*cmd));
