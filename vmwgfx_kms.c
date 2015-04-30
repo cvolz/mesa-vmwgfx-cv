@@ -604,6 +604,7 @@ int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
 				   flags, color,
 				   clips, num_clips, inc, NULL);
 
+	vmw_fifo_flush(dev_priv, false);
 	ttm_read_unlock(&dev_priv->reservation_sem);
 	return 0;
 }
@@ -952,6 +953,7 @@ int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
 					  clips, num_clips, increment, NULL);
 	}
 
+	vmw_fifo_flush(dev_priv, false);
 	ttm_read_unlock(&dev_priv->reservation_sem);
 	return ret;
 }
@@ -1296,6 +1298,8 @@ int vmw_kms_present(struct vmw_private *dev_priv,
 		if (unlikely(ret != 0))
 			break;
 	}
+
+	vmw_fifo_flush(dev_priv, false);
 
 	kfree(cmd);
 out_free_tmp:

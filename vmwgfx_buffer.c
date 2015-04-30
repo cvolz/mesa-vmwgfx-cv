@@ -53,6 +53,9 @@ static uint32_t gmr_ne_placement_flags = VMW_PL_FLAG_GMR |
 static uint32_t mob_placement_flags = VMW_PL_FLAG_MOB |
 	TTM_PL_FLAG_CACHED;
 
+static uint32_t mob_ne_placement_flags = VMW_PL_FLAG_MOB |
+	TTM_PL_FLAG_CACHED | TTM_PL_FLAG_NO_EVICT;
+
 struct ttm_placement vmw_vram_placement = {
 	.fpfn = 0,
 	.lpfn = 0,
@@ -163,6 +166,15 @@ struct ttm_placement vmw_mob_placement = {
 	.num_busy_placement = 1,
 	.placement = &mob_placement_flags,
 	.busy_placement = &mob_placement_flags
+};
+
+struct ttm_placement vmw_mob_ne_placement = {
+	.fpfn = 0,
+	.lpfn = 0,
+	.num_placement = 1,
+	.num_busy_placement = 1,
+	.placement = &mob_ne_placement_flags,
+	.busy_placement = &mob_ne_placement_flags
 };
 
 struct vmw_ttm_backend {
