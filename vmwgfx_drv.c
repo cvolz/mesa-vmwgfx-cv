@@ -398,22 +398,29 @@ static int vmw_request_device(struct vmw_private *dev_priv)
 	return 0;
 
 out_no_query_bo:
-	if (dev_priv->cman) {
-		struct vmw_cmdbuf_man *man = dev_priv->cman;
-
-		dev_priv->cman = NULL;
-		vmw_cmdbuf_remove_pool(man);
-		vmw_cmdbuf_man_destroy(man);
-	}
-	if (dev_priv->has_mob)
+	if (dev_priv->cman)
+		vmw_cmdbuf_remove_pool(dev_priv->cman);
+	if (dev_priv->has_mob) {
+		(void) ttm_bo_evict_mm(&dev_priv->bdev, VMW_PL_MOB);
 		vmw_otables_takedown(dev_priv);
+	}
+	if (dev_priv->cman)
+		vmw_cmdbuf_man_destroy(dev_priv->cman);
 out_no_mob:
 	vmw_fence_fifo_down(dev_priv->fman);
 	vmw_fifo_release(dev_priv, &dev_priv->fifo);
 	return ret;
 }
 
-static void vmw_release_device(struct vmw_private *dev_priv)
+/**
+ * vmw_release_device_early - Early part of fifo takedown.
+ *
+ * @dev_priv: Pointer to device private struct.
+ *
+ * This is the first part of command submission takedown, to be called before
+ * buffer management is taken down.
+ */
+static void vmw_release_device_early(struct vmw_private *dev_priv)
 {
 	/*
 	 * Previous destructions should've released
@@ -426,8 +433,27 @@ static void vmw_release_device(struct vmw_private *dev_priv)
 	if (dev_priv->cman)
 		vmw_cmdbuf_remove_pool(dev_priv->cman);
 
-	if (dev_priv->has_mob)
+	if (dev_priv->has_mob) {
+		ttm_bo_evict_mm(&dev_priv->bdev, VMW_PL_MOB);
 		vmw_otables_takedown(dev_priv);
+	}
+}
+
+/**
+ * vmw_release_device_late - Late part of fifo takedown.
+ *
+ * @dev_priv: Pointer to device private struct.
+ *
+ * This is the last part of the command submission takedown, to be called when
+ * command submission is no longer needed. It may wait on pending fences.
+ */
+static void vmw_release_device_late(struct vmw_private *dev_priv)
+{
+	vmw_fence_fifo_down(dev_priv->fman);
+	if (dev_priv->cman)
+		vmw_cmdbuf_man_destroy(dev_priv->cman);
+
+	vmw_fifo_release(dev_priv, &dev_priv->fifo);
 }
 
 /**
@@ -864,22 +890,18 @@ static int vmw_driver_unload(struct drm_device *dev)
 		vmw_svga_disable(dev_priv);
 	}
 
-	vmw_release_device(dev_priv);
 	vmw_kms_close(dev_priv);
 	vmw_overlay_close(dev_priv);
 
-	if (dev_priv->has_mob)
-		(void) ttm_bo_clean_mm(&dev_priv->bdev, VMW_PL_MOB);
 	if (dev_priv->has_gmr)
 		(void)ttm_bo_clean_mm(&dev_priv->bdev, VMW_PL_GMR);
 	(void)ttm_bo_clean_mm(&dev_priv->bdev, TTM_PL_VRAM);
 
+	vmw_release_device_early(dev_priv);
+	(void)ttm_bo_clean_mm(&dev_priv->bdev, VMW_PL_MOB);
 	(void)ttm_bo_device_release(&dev_priv->bdev);
-	vmw_fence_fifo_down(dev_priv->fman);
+	vmw_release_device_late(dev_priv);
 	vmw_fence_manager_takedown(dev_priv->fman);
-	if (dev_priv->cman)
-		vmw_cmdbuf_man_destroy(dev_priv->cman);
-	vmw_fifo_release(dev_priv, &dev_priv->fifo);
 
 	if (dev_priv->capabilities & SVGA_CAP_IRQMASK)
 		drm_irq_uninstall(dev_priv->dev);
@@ -1269,7 +1291,9 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 		 */
 		vmw_execbuf_release_pinned_bo(dev_priv);
 		vmw_resource_evict_all(dev_priv);
+		vmw_release_device_early(dev_priv);
 		ttm_bo_swapout_all(&dev_priv->bdev);
+		vmw_fence_fifo_down(dev_priv->fman);
 		break;
 	case PM_POST_HIBERNATION:
 	case PM_POST_RESTORE:
@@ -1340,7 +1364,7 @@ static int vmw_pm_freeze(struct device *kdev)
 	if (dev_priv->enable_fb)
 		vmw_svga_disable(dev_priv);
 
-	vmw_release_device(dev_priv);
+	vmw_release_device_late(dev_priv);
 
 	return 0;
 }
