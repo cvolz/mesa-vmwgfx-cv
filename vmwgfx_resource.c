@@ -1289,7 +1289,8 @@ out_no_reserve:
  * the buffer may not be bound to the resource at this point.
  *
  */
-int vmw_resource_reserve(struct vmw_resource *res, bool no_backup)
+int vmw_resource_reserve(struct vmw_resource *res, bool interruptible,
+			 bool no_backup)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	int ret;
@@ -1300,7 +1301,7 @@ int vmw_resource_reserve(struct vmw_resource *res, bool no_backup)
 
 	if (res->func->needs_backup && res->backup == NULL &&
 	    !no_backup) {
-		ret = vmw_resource_buf_alloc(res, true);
+		ret = vmw_resource_buf_alloc(res, interruptible);
 		if (unlikely(ret != 0))
 			return ret;
 	}
@@ -1629,14 +1630,14 @@ void vmw_resource_evict_all(struct vmw_private *dev_priv)
  * its id will never change as long as there is a pin reference.
  * This function returns 0 on success and a negative error code on failure.
  */
-int vmw_resource_pin(struct vmw_resource *res)
+int vmw_resource_pin(struct vmw_resource *res, bool interruptible)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
 	int ret;
 
-	ttm_write_lock(&dev_priv->reservation_sem, false);
+	ttm_write_lock(&dev_priv->reservation_sem, interruptible);
 	mutex_lock(&dev_priv->cmdbuf_mutex);
-	ret = vmw_resource_reserve(res, false);
+	ret = vmw_resource_reserve(res, interruptible, false);
 	if (ret)
 		goto out_no_reserve;
 
@@ -1645,13 +1646,13 @@ int vmw_resource_pin(struct vmw_resource *res)
 
 		if (res->backup) {
 			vbo = res->backup;
-			ttm_bo_reserve(&vbo->base, false, false, false,
+			ttm_bo_reserve(&vbo->base, interruptible, false, false,
 				       0);
 			if (!vbo->pin_count) {
 				ret = ttm_bo_validate
 					(&vbo->base,
 					 res->func->backup_placement,
-					 false, false, false);
+					 interruptible, false, false);
 				if (ret) {
 					ttm_bo_unreserve(&vbo->base);
 					goto out_no_validate;
@@ -1693,7 +1694,7 @@ void vmw_resource_unpin(struct vmw_resource *res)
 	ttm_read_lock(&dev_priv->reservation_sem, false);
 	mutex_lock(&dev_priv->cmdbuf_mutex);
 
-	ret = vmw_resource_reserve(res, true);
+	ret = vmw_resource_reserve(res, false, true);
 	WARN_ON(ret);
 
 	WARN_ON(res->pin_count == 0);
