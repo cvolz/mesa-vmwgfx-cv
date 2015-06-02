@@ -610,7 +610,7 @@ static int vmw_fifo_emit_dummy_legacy_query(struct vmw_private *dev_priv,
 	 * without writing to the query result structure.
 	 */
 
-	struct ttm_buffer_object *bo = dev_priv->dummy_query_bo;
+	struct ttm_buffer_object *bo = &dev_priv->dummy_query_bo->base;
 	struct {
 		SVGA3dCmdHeader header;
 		SVGA3dCmdWaitForQuery body;
@@ -659,7 +659,7 @@ static int vmw_fifo_emit_dummy_gb_query(struct vmw_private *dev_priv,
 	 * without writing to the query result structure.
 	 */
 
-	struct ttm_buffer_object *bo = dev_priv->dummy_query_bo;
+	struct ttm_buffer_object *bo = &dev_priv->dummy_query_bo->base;
 	struct {
 		SVGA3dCmdHeader header;
 		SVGA3dCmdWaitForGBQuery body;
