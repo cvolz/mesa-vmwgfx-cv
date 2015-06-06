@@ -141,6 +141,63 @@ static void vmw_stdu_crtc_destroy(struct drm_crtc *crtc)
 
 
 /**
+ * vmw_stdu_dma_update - Update DMA buf dirty region on the SVGA device
+ *
+ * @dev_priv:  VMW DRM device
+ * @file_priv: Pointer to a drm file private structure
+ * @vfbs: VMW framebuffer surface that may need a DMA buf update
+ * @x: top/left corner of the content area to blit from
+ * @y: top/left corner of the content area to blit from
+ * @width: width of the blit area
+ * @height: height of the blit area
+ *
+ * The SVGA device may have the DMA buf cached, so before letting the
+ * device use it as the source image for a subsequent operation, we
+ * update the cached copy.
+ *
+ * RETURNs:
+ * 0 on success, error code on failure
+ */
+static int vmw_stdu_dma_update(struct vmw_private *dev_priv,
+			       struct drm_file *file_priv,
+			       struct vmw_framebuffer_surface *vfbs,
+			       uint32_t x, uint32_t y,
+			       uint32_t width, uint32_t height)
+{
+	size_t fifo_size;
+	struct {
+		SVGA3dCmdHeader header;
+		SVGA3dCmdUpdateGBImage body;
+	} img_update_cmd;
+
+
+	/* Only need to do this if the surface is a DMA buf proxy */
+	if (!vfbs->is_dmabuf_proxy)
+		return 0;
+
+	fifo_size = sizeof(img_update_cmd);
+
+	memset(&img_update_cmd, 0, fifo_size);
+	img_update_cmd.header.id   = SVGA_3D_CMD_UPDATE_GB_IMAGE;
+	img_update_cmd.header.size = sizeof(img_update_cmd.body);
+
+	img_update_cmd.body.image.sid = vfbs->surface->res.id;
+
+	img_update_cmd.body.box.x = x;
+	img_update_cmd.body.box.y = y;
+	img_update_cmd.body.box.w = width;
+	img_update_cmd.body.box.h = height;
+	img_update_cmd.body.box.d = 1;
+
+	return vmw_execbuf_process(file_priv, dev_priv, NULL,
+				   (void *) &img_update_cmd,
+				   fifo_size, 0, VMW_QUIRK_SRC_SID_OK,
+				   NULL, NULL);
+}
+
+
+
+/**
  * vmw_stdu_content_copy - copies an area from the content to display surface
  *
  * @dev_priv:  VMW DRM device
@@ -165,11 +222,13 @@ static int vmw_stdu_content_copy(struct vmw_private *dev_priv,
 				 uint32_t width, uint32_t height,
 				 uint32_t display_x, uint32_t display_y)
 {
+	struct vmw_framebuffer_surface *content_vfbs;
 	size_t fifo_size;
 	int ret;
 	void *cmd;
+	u32 quirks = VMW_QUIRK_DST_SID_OK;
 
-	struct vmw_surface_dma {
+	struct {
 		SVGA3dCmdHeader     header;
 		SVGA3dCmdSurfaceDMA body;
 		SVGA3dCopyBox       area;
@@ -192,24 +251,43 @@ static int vmw_stdu_content_copy(struct vmw_private *dev_priv,
 		return -EINVAL;
 	}
 
+
 	if (stdu->content_fb_type == SEPARATE_DMA) {
 		struct vmw_framebuffer *content_vfb;
-		struct vmw_framebuffer_dmabuf *content_vfbd;
-		struct vmw_framebuffer_surface *content_vfbs;
 		struct drm_vmw_size cur_size = {0};
 		const struct svga3d_surface_desc *desc;
+		enum SVGA3dSurfaceFormat format;
 		SVGA3dCmdSurfaceDMASuffix *suffix;
 		SVGAGuestPtr ptr;
 
+
 		content_vfb  = vmw_framebuffer_to_vfb(stdu->content_fb);
-		content_vfbd = vmw_framebuffer_to_vfbd(stdu->content_fb);
-		content_vfbs = vmw_framebuffer_to_vfbs(stdu->content_fb);
 
 		cur_size.width  = width;
 		cur_size.height = height;
 		cur_size.depth  = 1;
 
-		desc = svga3dsurface_get_desc(content_vfbs->surface->format);
+		/* Derive a SVGA3dSurfaceFormat for the DMA buf */
+		switch (content_vfb->base.bits_per_pixel) {
+		case 32:
+			format = SVGA3D_A8R8G8B8;
+			break;
+		case 24:
+			format = SVGA3D_X8R8G8B8;
+			break;
+		case 16:
+			format = SVGA3D_R5G6B5;
+			break;
+		case 15:
+			format = SVGA3D_A1R5G5B5;
+			break;
+		default:
+			DRM_ERROR("Invalid color depth: %d\n",
+					content_vfb->base.depth);
+			return -EINVAL;
+		}
+
+		desc = svga3dsurface_get_desc(format);
 
 
 		fifo_size = sizeof(surface_dma_cmd);
@@ -246,22 +324,42 @@ static int vmw_stdu_content_copy(struct vmw_private *dev_priv,
 						desc,
 						&cur_size,
 						stdu->content_fb->pitch);
-
 		cmd = (void *) &surface_dma_cmd;
 	} else {
-		struct vmw_framebuffer *content_vfb;
+		u32 src_id;
 
-		content_vfb = vmw_framebuffer_to_vfb(stdu->content_fb);
+
+		content_vfbs = vmw_framebuffer_to_vfbs(stdu->content_fb);
+
+		if (content_vfbs->is_dmabuf_proxy) {
+			ret = vmw_stdu_dma_update(dev_priv, file_priv,
+						  content_vfbs,
+						  content_x, content_y,
+						  width, height);
+
+			if (ret != 0) {
+				DRM_ERROR("Failed to update cached DMA buf\n");
+				return ret;
+			}
+
+			quirks |= VMW_QUIRK_SRC_SID_OK;
+			src_id = content_vfbs->surface->res.id;
+		} else {
+			struct vmw_framebuffer *content_vfb;
+
+			content_vfb = vmw_framebuffer_to_vfb(stdu->content_fb);
+			src_id = content_vfb->user_handle;
+		}
 
 		fifo_size = sizeof(surface_cpy_cmd);
 
-		memset(&surface_cpy_cmd, 0, sizeof(surface_cpy_cmd));
+		memset(&surface_cpy_cmd, 0, fifo_size);
 
 		surface_cpy_cmd.header.id   = SVGA_3D_CMD_SURFACE_COPY;
 		surface_cpy_cmd.header.size = sizeof(surface_cpy_cmd.body) +
 					      sizeof(surface_cpy_cmd.area);
 
-		surface_cpy_cmd.body.src.sid  = content_vfb->user_handle;
+		surface_cpy_cmd.body.src.sid  = src_id;
 		surface_cpy_cmd.body.dest.sid = stdu->display_srf->res.id;
 
 		surface_cpy_cmd.area.srcx = content_x;
@@ -275,8 +373,11 @@ static int vmw_stdu_content_copy(struct vmw_private *dev_priv,
 		cmd = (void *) &surface_cpy_cmd;
 	}
 
-	ret = vmw_execbuf_process(file_priv, dev_priv, NULL, cmd,
-				  fifo_size, 0, VMW_QUIRK_SCREENTARGET,
+
+
+	ret = vmw_execbuf_process(file_priv, dev_priv, NULL,
+				  (void *) cmd,
+				  fifo_size, 0, quirks,
 				  NULL, NULL);
 
 	return ret;
@@ -390,7 +491,8 @@ static int vmw_stdu_bind_st(struct vmw_private *dev_priv,
  * vmw_stdu_update_st - Updates a Screen Target
  *
  * @dev_priv: VMW DRM device
- * @file_priv: Pointer to a drm file private structure
+ * @file_priv: Pointer to DRM file private structure.  Set to NULL when
+ *             we want to blank display.
  * @stdu: display unit affected
  * @update_area: area that needs to be updated
  *
@@ -411,6 +513,7 @@ static int vmw_stdu_update_st(struct vmw_private *dev_priv,
 	u32 width, height;
 	u32 display_update_x, display_update_y;
 	unsigned short display_x1, display_y1, display_x2, display_y2;
+	int ret;
 
 	struct {
 		SVGA3dCmdHeader header;
@@ -443,8 +546,11 @@ static int vmw_stdu_update_st(struct vmw_private *dev_priv,
 	height = min(update_area->y2, display_y2) -
 		 max(update_area->y1, display_y1);
 
+	/*
+	 * If content is on a separate surface, then copy the dirty area to
+	 * the display surface
+	 */
 	if (file_priv && stdu->content_fb_type != SAME_AS_DISPLAY) {
-		int ret;
 
 		ret = vmw_stdu_content_copy(dev_priv, file_priv,
 					    stdu,
@@ -454,6 +560,29 @@ static int vmw_stdu_update_st(struct vmw_private *dev_priv,
 					    display_update_x, display_update_y);
 		if (unlikely(ret != 0)) {
 			DRM_ERROR("Failed to blit content\n");
+			return ret;
+		}
+	}
+
+
+	/*
+	 * If the display surface is the same as the content surface, then
+	 * it may be backed by a DMA buf.  If it is then we need to update
+	 * the device's cached copy of the DMA buf before issuing the screen
+	 * target update.
+	 */
+	if (file_priv && stdu->content_fb_type == SAME_AS_DISPLAY) {
+		struct vmw_framebuffer_surface *vfbs;
+
+		vfbs = vmw_framebuffer_to_vfbs(stdu->content_fb);
+		ret = vmw_stdu_dma_update(dev_priv, file_priv,
+					  vfbs,
+					  max(update_area->x1, display_x1),
+					  max(update_area->y1, display_y1),
+					  width, height);
+
+		if (ret != 0) {
+			DRM_ERROR("Failed to update cached DMA buffer\n");
 			return ret;
 		}
 	}
@@ -1073,8 +1202,7 @@ int vmw_kms_stdu_init_display(struct vmw_private *dev_priv)
 	if (!VMWGFX_ENABLE_SCREEN_TARGET_OTABLE)
 		return -ENOSYS;
 
-	if (!(dev_priv->capabilities & SVGA_CAP_GBOBJECTS) ||
-	    !(dev_priv->capabilities & SVGA_CAP_3D))
+	if (!(dev_priv->capabilities & SVGA_CAP_GBOBJECTS))
 		return -ENOSYS;
 
 	ret = drm_vblank_init(dev, VMWGFX_NUM_DISPLAY_UNITS);
@@ -1340,7 +1468,7 @@ int vmw_kms_stdu_present(struct vmw_private *dev_priv,
 		cmd->body.dest.sid = stdu[cur_du]->display_srf->res.id;
 
 		ret = vmw_execbuf_process(file_priv, dev_priv, NULL, cmd,
-					  fifo_size, 0, VMW_QUIRK_SCREENTARGET,
+					  fifo_size, 0, VMW_QUIRK_DST_SID_OK,
 					  NULL, NULL);
 
 		if (unlikely(ret != 0))
