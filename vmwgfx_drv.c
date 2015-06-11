@@ -1137,40 +1137,11 @@ static long vmw_compat_ioctl(struct file *filp, unsigned int cmd,
 
 static int vmw_firstopen(struct drm_device *dev)
 {
-	struct vmw_private *dev_priv = vmw_priv(dev);
-	dev_priv->is_opened = true;
-
 	return 0;
 }
 
 static void vmw_lastclose(struct drm_device *dev)
 {
-	struct vmw_private *dev_priv = vmw_priv(dev);
-	struct drm_crtc *crtc;
-	struct drm_mode_set set;
-	int ret;
-
-	/**
-	 * Do nothing on the lastclose call from drm_unload.
-	 */
-
-	if (!dev_priv->is_opened)
-		return;
-
-	dev_priv->is_opened = false;
-	set.x = 0;
-	set.y = 0;
-	set.fb = NULL;
-	set.mode = NULL;
-	set.connectors = NULL;
-	set.num_connectors = 0;
-
-	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
-		set.crtc = crtc;
-		ret = crtc->funcs->set_config(&set);
-		WARN_ON(ret != 0);
-	}
-
 }
 
 static void vmw_master_init(struct vmw_master *vmaster)
@@ -1355,6 +1326,8 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 
 	switch (val) {
 	case PM_HIBERNATION_PREPARE:
+		if (dev_priv->enable_fb)
+			vmw_fb_off(dev_priv);
 		ttm_suspend_lock(&dev_priv->reservation_sem);
 		/*
 		 * This empties VRAM and unbinds all GMR bindings.
@@ -1370,6 +1343,8 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 	case PM_POST_RESTORE:
 		vmw_fence_fifo_up(dev_priv->fman);
 		ttm_suspend_unlock(&dev_priv->reservation_sem);
+		if (dev_priv->enable_fb)
+			vmw_fb_on(dev_priv);
 		break;
 	default:
 		break;
