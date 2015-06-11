@@ -580,7 +580,6 @@ static int vmw_stdu_crtc_set_config(struct drm_mode_set *set)
 		goto err_unref_content;
 	}
 
-	vmw_fb_off(dev_priv);
 	vmw_svga_enable(dev_priv);
 
 	/*
