@@ -898,7 +898,8 @@ static int vmw_driver_unload(struct drm_device *dev)
 	(void)ttm_bo_clean_mm(&dev_priv->bdev, TTM_PL_VRAM);
 
 	vmw_release_device_early(dev_priv);
-	(void)ttm_bo_clean_mm(&dev_priv->bdev, VMW_PL_MOB);
+	if (dev_priv->has_mob)
+		(void)ttm_bo_clean_mm(&dev_priv->bdev, VMW_PL_MOB);
 	(void)ttm_bo_device_release(&dev_priv->bdev);
 	vmw_release_device_late(dev_priv);
 	vmw_fence_manager_takedown(dev_priv->fman);
@@ -1242,29 +1243,72 @@ static void vmw_master_drop(struct drm_device *dev,
 		vmw_fb_on(dev_priv);
 }
 
-void vmw_svga_enable(struct vmw_private *dev_priv)
+/**
+ * __vmw_svga_enable - Enable SVGA mode, FIFO and use of VRAM.
+ *
+ * @dev_priv: Pointer to device private struct.
+ * Needs the reservation sem to be held in non-exclusive mode.
+ */
+void __vmw_svga_enable(struct vmw_private *dev_priv)
 {
-	ttm_read_lock(&dev_priv->reservation_sem, false);
 	spin_lock(&dev_priv->svga_lock);
 	if (!dev_priv->bdev.man[TTM_PL_VRAM].use_type) {
 		vmw_write(dev_priv, SVGA_REG_ENABLE, SVGA_REG_ENABLE);
 		dev_priv->bdev.man[TTM_PL_VRAM].use_type = true;
 	}
 	spin_unlock(&dev_priv->svga_lock);
+}
+
+/**
+ * vmw_svga_enable - Enable SVGA mode, FIFO and use of VRAM.
+ *
+ * @dev_priv: Pointer to device private struct.
+ */
+void vmw_svga_enable(struct vmw_private *dev_priv)
+{
+	ttm_read_lock(&dev_priv->reservation_sem, false);
+	__vmw_svga_enable(dev_priv);
 	ttm_read_unlock(&dev_priv->reservation_sem);
 }
 
-void vmw_svga_disable(struct vmw_private *dev_priv)
+/**
+ * __vmw_svga_disable - Disable SVGA mode and use of VRAM.
+ *
+ * @dev_priv: Pointer to device private struct.
+ * Needs the reservation sem to be held in exclusive mode.
+ * Will not empty VRAM. VRAM must be emptied by caller.
+ */
+void __vmw_svga_disable(struct vmw_private *dev_priv)
 {
-	ttm_write_lock(&dev_priv->reservation_sem, false);
+	spin_lock(&dev_priv->svga_lock);
 	if (dev_priv->bdev.man[TTM_PL_VRAM].use_type) {
 		dev_priv->bdev.man[TTM_PL_VRAM].use_type = false;
-		if (ttm_bo_evict_mm(&dev_priv->bdev, TTM_PL_VRAM))
-			DRM_ERROR("Failed evicting VRAM buffers.\n");
-
 		vmw_write(dev_priv, SVGA_REG_ENABLE,
 			  SVGA_REG_ENABLE_ENABLE_HIDE);
 	}
+	spin_unlock(&dev_priv->svga_lock);
+}
+
+/**
+ * vmw_svga_disable - Disable SVGA_MODE, and use of VRAM. Keep the fifo
+ * running.
+ *
+ * @dev_priv: Pointer to device private struct.
+ * Will empty VRAM.
+ */
+void vmw_svga_disable(struct vmw_private *dev_priv)
+{
+	ttm_write_lock(&dev_priv->reservation_sem, false);
+	spin_lock(&dev_priv->svga_lock);
+	if (dev_priv->bdev.man[TTM_PL_VRAM].use_type) {
+		dev_priv->bdev.man[TTM_PL_VRAM].use_type = false;
+		vmw_write(dev_priv, SVGA_REG_ENABLE,
+			  SVGA_REG_ENABLE_ENABLE_HIDE);
+		spin_unlock(&dev_priv->svga_lock);
+		if (ttm_bo_evict_mm(&dev_priv->bdev, TTM_PL_VRAM))
+			DRM_ERROR("Failed evicting VRAM buffers.\n");
+	} else
+		spin_unlock(&dev_priv->svga_lock);
 	ttm_write_unlock(&dev_priv->reservation_sem);
 }
 
@@ -1362,7 +1406,7 @@ static int vmw_pm_freeze(struct device *kdev)
 	}
 
 	if (dev_priv->enable_fb)
-		vmw_svga_disable(dev_priv);
+		__vmw_svga_disable(dev_priv);
 
 	vmw_release_device_late(dev_priv);
 
@@ -1387,7 +1431,7 @@ static int vmw_pm_restore(struct device *kdev)
 		return ret;
 
 	if (dev_priv->enable_fb)
-		vmw_svga_enable(dev_priv);
+		__vmw_svga_enable(dev_priv);
 
 	dev_priv->suspended = false;
 
