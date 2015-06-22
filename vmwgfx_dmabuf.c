@@ -105,7 +105,7 @@ int vmw_dmabuf_pin_in_vram_or_gmr(struct vmw_private *dev_priv,
 	ret = ttm_bo_validate(bo, &vmw_vram_gmr_placement, interruptible,
 			      false, false);
 	if (likely(ret == 0) || ret == -ERESTARTSYS)
-		goto err_unreserve;
+		goto out_unreserve;
 
 	/**
 	 * If that failed, try VRAM again, this time evicting
@@ -113,10 +113,9 @@ int vmw_dmabuf_pin_in_vram_or_gmr(struct vmw_private *dev_priv,
 	 */
 	ret = ttm_bo_validate(bo, &vmw_vram_placement, interruptible,
 			      false, false);
+out_unreserve:
 	if (!ret)
 		vmw_bo_pin_reserved(buf, true);
-
-err_unreserve:
 	ttm_bo_unreserve(bo);
 err:
 	ttm_write_unlock(&dev_priv->reservation_sem);
