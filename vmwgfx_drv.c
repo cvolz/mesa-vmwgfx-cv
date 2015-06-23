@@ -356,6 +356,42 @@ static int vmw_dummy_query_bo_create(struct vmw_private *dev_priv)
 	return ret;
 }
 
+/**
+ * vmw_request_device_late - Perform late device setup
+ *
+ * @dev_priv: Pointer to device private.
+ *
+ * This function performs setup of otables and enables large command
+ * buffer submission. These tasks are split out to a separate function
+ * because it reverts vmw_release_device_early and is intended to be used
+ * by an error path in the hibernation code.
+ */
+static int vmw_request_device_late(struct vmw_private *dev_priv)
+{
+	int ret;
+
+	if (dev_priv->has_mob) {
+		ret = vmw_otables_setup(dev_priv);
+		if (unlikely(ret != 0)) {
+			DRM_ERROR("Unable to initialize "
+				  "guest Memory OBjects.\n");
+			return ret;
+		}
+	}
+
+	if (dev_priv->cman) {
+		ret = vmw_cmdbuf_set_pool_size(dev_priv->cman,
+					       256*4096, 2*4096);
+		if (ret) {
+			struct vmw_cmdbuf_man *man = dev_priv->cman;
+
+			dev_priv->cman = NULL;
+			vmw_cmdbuf_man_destroy(man);
+		}
+	}
+
+	return 0;
+}
 
 static int vmw_request_device(struct vmw_private *dev_priv)
 {
@@ -371,25 +407,9 @@ static int vmw_request_device(struct vmw_private *dev_priv)
 	if (IS_ERR(dev_priv->cman))
 		dev_priv->cman = NULL;
 
-	if (dev_priv->has_mob) {
-		ret = vmw_otables_setup(dev_priv);
-		if (unlikely(ret != 0)) {
-			DRM_ERROR("Unable to initialize "
-				  "guest Memory OBjects.\n");
-			goto out_no_mob;
-		}
-	}
-
-	if (dev_priv->cman) {
-		ret = vmw_cmdbuf_set_pool_size(dev_priv->cman,
-					       256*4096, 2*4096);
-		if (ret) {
-			struct vmw_cmdbuf_man *man = dev_priv->cman;
-
-			dev_priv->cman = NULL;
-			vmw_cmdbuf_man_destroy(man);
-		}
-	}
+	ret = vmw_request_device_late(dev_priv);
+	if (ret)
+		goto out_no_mob;
 
 	ret = vmw_dummy_query_bo_create(dev_priv);
 	if (unlikely(ret != 0))
@@ -1341,6 +1361,7 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 		break;
 	case PM_POST_HIBERNATION:
 	case PM_POST_RESTORE:
+		vmw_fence_fifo_up(dev_priv->fman);
 		ttm_suspend_unlock(&dev_priv->reservation_sem);
 		break;
 	default:
@@ -1401,6 +1422,7 @@ static int vmw_pm_freeze(struct device *kdev)
 		DRM_ERROR("Can't hibernate while 3D resources are active.\n");
 		if (dev_priv->enable_fb)
 			vmw_fifo_resource_inc(dev_priv);
+		WARN_ON(vmw_request_device_late(dev_priv));
 		dev_priv->suspended = false;
 		return -EBUSY;
 	}
