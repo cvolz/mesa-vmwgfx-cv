@@ -470,6 +470,13 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 
 #endif
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 14, 0))
+#define U32_MAX ((u32)~0U)
+#define U16_MAX ((u16)~0U)
+#define S32_MAX ((s32)(U32_MAX>>1))
+#define S32_MIN ((s32)(-S32_MAX - 1))
+#endif
+
 /* set_need_resched() disappeared in linux 3.16. Temporary fix. */
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 16, 0))
 #define set_need_resched()
