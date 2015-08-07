@@ -917,6 +917,7 @@ static int vmw_driver_unload(struct drm_device *dev)
 	if (dev_priv->ctx.cmd_bounce)
 		vfree(dev_priv->ctx.cmd_bounce);
 	if (dev_priv->enable_fb) {
+		vmw_fb_off(dev_priv);
 		vmw_fb_close(dev_priv);
 		vmw_fifo_resource_dec(dev_priv);
 		vmw_svga_disable(dev_priv);

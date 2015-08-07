@@ -514,17 +514,12 @@ static int vmw_kms_new_framebuffer_surface(struct vmw_private *dev_priv,
 	if (ret)
 		goto out_err2;
 
-	if (!vmw_surface_reference(surface)) {
-		DRM_ERROR("failed to reference surface %p\n", surface);
-		goto out_err3;
-	}
-
 	vfbs->base.base.bits_per_pixel = mode_cmd->bpp;
 	vfbs->base.base.pitch = mode_cmd->pitch;
 	vfbs->base.base.depth = mode_cmd->depth;
 	vfbs->base.base.width = mode_cmd->width;
 	vfbs->base.base.height = mode_cmd->height;
-	vfbs->surface = surface;
+	vfbs->surface = vmw_surface_reference(surface);
 	vfbs->base.user_handle = mode_cmd->handle;
 	vfbs->is_dmabuf_proxy = is_dmabuf_proxy;
 
@@ -532,8 +527,6 @@ static int vmw_kms_new_framebuffer_surface(struct vmw_private *dev_priv,
 
 	return 0;
 
-out_err3:
-	drm_framebuffer_cleanup(&vfbs->base.base);
 out_err2:
 	kfree(vfbs);
 out_err1:
@@ -804,25 +797,18 @@ static int vmw_kms_new_framebuffer_dmabuf(struct vmw_private *dev_priv,
 	if (ret)
 		goto out_err2;
 
-	if (!vmw_dmabuf_reference(dmabuf)) {
-		DRM_ERROR("failed to reference dmabuf %p\n", dmabuf);
-		goto out_err3;
-	}
-
 	vfbd->base.base.bits_per_pixel = mode_cmd->bpp;
 	vfbd->base.base.pitch = mode_cmd->pitch;
 	vfbd->base.base.depth = mode_cmd->depth;
 	vfbd->base.base.width = mode_cmd->width;
 	vfbd->base.base.height = mode_cmd->height;
 	vfbd->base.dmabuf = true;
-	vfbd->buffer = dmabuf;
+	vfbd->buffer = vmw_dmabuf_reference(dmabuf);
 	vfbd->base.user_handle = mode_cmd->handle;
 	*out = &vfbd->base;
 
 	return 0;
 
-out_err3:
-	drm_framebuffer_cleanup(&vfbd->base.base);
 out_err2:
 	kfree(vfbd);
 out_err1:
@@ -868,15 +854,21 @@ vmw_kms_new_framebuffer(struct vmw_private *dev_priv,
 	}
 
 	/* Create the new framebuffer depending one what we have */
-	if (surface)
+	if (surface) {
 		ret = vmw_kms_new_framebuffer_surface(dev_priv, surface, &vfb,
 						      mode_cmd,
 						      is_dmabuf_proxy);
-	else if (dmabuf)
+
+		/* vmw_create_dmabuf_proxy() adds a reference that is no longer
+		 * needed */
+		if (is_dmabuf_proxy)
+			vmw_surface_unreference(&surface);
+	} else if (dmabuf) {
 		ret = vmw_kms_new_framebuffer_dmabuf(dev_priv, dmabuf, &vfb,
 						     mode_cmd);
-	else
+	} else {
 		BUG();
+	}
 
 	if (ret)
 		return ERR_PTR(ret);
