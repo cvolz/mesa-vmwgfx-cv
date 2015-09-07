@@ -848,7 +848,7 @@ vmw_kms_new_framebuffer(struct vmw_private *dev_priv,
 			bool only_2d,
 			const struct drm_mode_fb_cmd *mode_cmd)
 {
-	struct vmw_framebuffer *vfb;
+	struct vmw_framebuffer *vfb = NULL;
 	bool is_dmabuf_proxy = false;
 	int ret;
 
