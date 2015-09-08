@@ -72,8 +72,7 @@ struct vmw_fb_par {
 
 	struct drm_crtc *crtc;
 	struct drm_connector *con;
-
-	bool local_mode;
+	struct delayed_work local_work;
 };
 
 static int vmw_fb_setcolreg(unsigned regno, unsigned red, unsigned green,
@@ -172,8 +171,10 @@ static int vmw_fb_blank(int blank, struct fb_info *info)
  * Dirty code
  */
 
-static void vmw_fb_dirty_flush(struct vmw_fb_par *par)
+static void vmw_fb_dirty_flush(struct work_struct *work)
 {
+	struct vmw_fb_par *par = container_of(work, struct vmw_fb_par,
+					      local_work.work);
 	struct vmw_private *vmw_priv = par->vmw_priv;
 	struct fb_info *info = vmw_priv->fb_info;
 	unsigned long irq_flags;
@@ -255,7 +256,6 @@ static void vmw_fb_dirty_mark(struct vmw_fb_par *par,
 			      unsigned x1, unsigned y1,
 			      unsigned width, unsigned height)
 {
-	struct fb_info *info = par->vmw_priv->fb_info;
 	unsigned long flags;
 	unsigned x2 = x1 + width;
 	unsigned y2 = y1 + height;
@@ -272,11 +272,8 @@ static void vmw_fb_dirty_mark(struct vmw_fb_par *par,
 		/* if we are active start the dirty work
 		 * we share the work with the defio system */
 		if (par->dirty.active)
-#if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
-			schedule_delayed_work(&par->def_par.deferred_work, VMW_DIRTY_DELAY);
-#else
-			schedule_delayed_work(&info->deferred_work, VMW_DIRTY_DELAY);
-#endif
+			schedule_delayed_work(&par->local_work,
+					      VMW_DIRTY_DELAY);
 	} else {
 		if (x1 < par->dirty.x1)
 			par->dirty.x1 = x1;
@@ -350,9 +347,14 @@ static void vmw_deferred_io(struct fb_info *info,
 		par->dirty.x2 = info->var.xres;
 		par->dirty.y2 = y2;
 		spin_unlock_irqrestore(&par->dirty.lock, flags);
-	}
 
-	vmw_fb_dirty_flush(par);
+		/*
+		 * Since we've already waited on this work once, try to
+		 * execute asap.
+		 */
+		cancel_delayed_work(&par->local_work);
+		schedule_delayed_work(&par->local_work, 0);
+	}
 };
 
 #if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
@@ -631,11 +633,7 @@ static int vmw_fb_set_par(struct fb_info *info)
 	/* If there already was stuff dirty we wont
 	 * schedule a new work, so lets do it now */
 
-#if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
-	schedule_delayed_work(&par->def_par.deferred_work, 0);
-#else
-	schedule_delayed_work(&info->deferred_work, 0);
-#endif
+	schedule_delayed_work(&par->local_work, 0);
 
 out_unlock:
 	if (old_mode)
@@ -692,6 +690,7 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	vmw_priv->fb_info = info;
 	par = info->par;
 	memset(par, 0, sizeof(*par));
+	INIT_DELAYED_WORK(&par->local_work, &vmw_fb_dirty_flush);
 	par->vmw_priv = vmw_priv;
 	par->vmalloc = NULL;
 	par->max_width = fb_width;
@@ -838,6 +837,7 @@ int vmw_fb_close(struct vmw_private *vmw_priv)
 
 	/* ??? order */
 	fb_deferred_io_cleanup(info);
+	cancel_delayed_work_sync(&par->local_work);
 	unregister_framebuffer(info);
 
 	(void) vmw_fb_kms_detach(par, true, true);
@@ -864,7 +864,12 @@ int vmw_fb_off(struct vmw_private *vmw_priv)
 	par->dirty.active = false;
 	spin_unlock_irqrestore(&par->dirty.lock, flags);
 
-	flush_scheduled_work();
+#if (defined(VMWGFX_STANDALONE) && defined(VMWGFX_FB_DEFERRED))
+	flush_delayed_work(&par->def_par.deferred_work);
+#else
+	flush_delayed_work(&info->deferred_work);
+#endif
+	flush_delayed_work(&par->local_work);
 
 	mutex_lock(&par->bo_mutex);
 	(void) vmw_fb_kms_detach(par, true, false);
