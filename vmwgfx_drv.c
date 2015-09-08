@@ -28,6 +28,7 @@
 #include "drmP.h"
 #include "drm_global.h"
 #include "vmwgfx_drv.h"
+#include "vmwgfx_binding.h"
 #include "ttm/ttm_placement.h"
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_object.h"
@@ -127,6 +128,9 @@
 #define DRM_IOCTL_VMW_SYNCCPU					\
 	DRM_IOW(DRM_COMMAND_BASE + DRM_VMW_SYNCCPU,		\
 		 struct drm_vmw_synccpu_arg)
+#define DRM_IOCTL_VMW_CREATE_EXTENDED_CONTEXT			\
+	DRM_IOWR(DRM_COMMAND_BASE + DRM_VMW_CREATE_EXTENDED_CONTEXT,	\
+		struct drm_vmw_context_arg)
 
 /**
  * The core DRM version of this macro doesn't account for
@@ -168,8 +172,8 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 		      DRM_UNLOCKED | DRM_RENDER_ALLOW),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_REF_SURFACE, vmw_surface_reference_ioctl,
 		      DRM_AUTH | DRM_UNLOCKED | DRM_RENDER_ALLOW),
-	VMW_IOCTL_DEF(DRM_IOCTL_VMW_EXECBUF, vmw_execbuf_ioctl,
-		      DRM_AUTH | DRM_UNLOCKED | DRM_RENDER_ALLOW),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_EXECBUF, NULL, DRM_AUTH | DRM_UNLOCKED |
+		      DRM_RENDER_ALLOW),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_FENCE_WAIT, vmw_fence_obj_wait_ioctl,
 		      DRM_AUTH | DRM_UNLOCKED | DRM_RENDER_ALLOW),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_FENCE_SIGNALED,
@@ -206,6 +210,9 @@ static struct drm_ioctl_desc vmw_ioctls[] = {
 		      DRM_AUTH | DRM_UNLOCKED | DRM_RENDER_ALLOW),
 	VMW_IOCTL_DEF(DRM_IOCTL_VMW_SYNCCPU,
 		      vmw_user_dmabuf_synccpu_ioctl,
+		      DRM_AUTH | DRM_UNLOCKED | DRM_RENDER_ALLOW),
+	VMW_IOCTL_DEF(DRM_IOCTL_VMW_CREATE_EXTENDED_CONTEXT,
+		      vmw_extended_context_define_ioctl,
 		      DRM_AUTH | DRM_UNLOCKED | DRM_RENDER_ALLOW),
 };
 
@@ -406,8 +413,10 @@ static int vmw_request_device(struct vmw_private *dev_priv)
 	}
 	vmw_fence_fifo_up(dev_priv->fman);
 	dev_priv->cman = vmw_cmdbuf_man_create(dev_priv);
-	if (IS_ERR(dev_priv->cman))
+	if (IS_ERR(dev_priv->cman)) {
 		dev_priv->cman = NULL;
+		dev_priv->has_dx = false;
+	}
 
 	ret = vmw_request_device_late(dev_priv);
 	if (ret)
@@ -845,6 +854,14 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		}
 	}
 
+	if (dev_priv->has_mob) {
+		spin_lock(&dev_priv->cap_lock);
+		vmw_write(dev_priv, SVGA_REG_DEV_CAP, SVGA3D_DEVCAP_DX);
+		dev_priv->has_dx = !!vmw_read(dev_priv, SVGA_REG_DEV_CAP);
+		spin_unlock(&dev_priv->cap_lock);
+	}
+
+
 	ret = vmw_kms_init(dev_priv);
 	if (unlikely(ret != 0))
 		goto out_no_kms;
@@ -853,6 +870,8 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	ret = vmw_request_device(dev_priv);
 	if (ret)
 		goto out_no_fifo;
+
+	DRM_INFO("DX: %s\n", dev_priv->has_dx ? "yes." : "no.");
 
 	if (dev_priv->enable_fb) {
 		vmw_fifo_resource_inc(dev_priv);
@@ -901,6 +920,8 @@ out_err0:
 	for (i = vmw_res_context; i < vmw_res_max; ++i)
 		idr_destroy(&dev_priv->res_idr[i]);
 
+	if (dev_priv->ctx.staged_bindings)
+		vmw_binding_state_free(dev_priv->ctx.staged_bindings);
 	kfree(dev_priv);
 	return ret;
 }
@@ -950,6 +971,8 @@ static int vmw_driver_unload(struct drm_device *dev)
 	iounmap(dev_priv->mmio_virt);
 	drm_mtrr_del(dev_priv->mmio_mtrr, dev_priv->mmio_start,
 		     dev_priv->mmio_size, DRM_MTRR_WC);
+	if (dev_priv->ctx.staged_bindings)
+		vmw_binding_state_free(dev_priv->ctx.staged_bindings);
 	vmw_ttm_global_release(dev_priv);
 
 	for (i = vmw_res_context; i < vmw_res_max; ++i)
@@ -1090,19 +1113,26 @@ static long vmw_generic_ioctl(struct file *filp, unsigned int cmd,
 		struct drm_ioctl_desc *ioctl =
 		    &vmw_ioctls[nr - DRM_COMMAND_BASE];
 
+		if (nr == DRM_COMMAND_BASE + DRM_VMW_EXECBUF) {
+			ret = (long) drm_ioctl_permit(ioctl->flags, file_priv);
+			if (unlikely(ret != 0))
+				return ret;
+
+			if (unlikely((cmd & (IOC_IN | IOC_OUT)) != IOC_IN))
+				goto out_io_encoding;
+
+			return (long) vmw_execbuf_ioctl(dev, arg, file_priv,
+							_IOC_SIZE(cmd));
+		}
+
 #ifndef VMWGFX_STANDALONE
-		if (unlikely(ioctl->cmd_drv != cmd)) {
-			DRM_ERROR("Invalid command format, ioctl %d\n",
-				  nr - DRM_COMMAND_BASE);
-			return -EINVAL;
-		}
+		if (unlikely(ioctl->cmd_drv != cmd))
+			goto out_io_encoding;
 #else
-		if (unlikely(ioctl->cmd != cmd)) {
-			DRM_ERROR("Invalid command format, ioctl %d\n",
-				  nr - DRM_COMMAND_BASE);
-			return -EINVAL;
-		}
+		if (unlikely(ioctl->cmd != cmd))
+			goto out_io_encoding;
 #endif
+
 		flags = ioctl->flags;
 	} else if (!drm_ioctl_flags(nr, &flags))
 		return -EINVAL;
@@ -1123,6 +1153,12 @@ static long vmw_generic_ioctl(struct file *filp, unsigned int cmd,
 		ttm_read_unlock(&vmaster->lock);
 
 	return ret;
+
+out_io_encoding:
+	DRM_ERROR("Invalid command format, ioctl %d\n",
+		  nr - DRM_COMMAND_BASE);
+
+	return -EINVAL;
 }
 
 static long vmw_unlocked_ioctl(struct file *filp, unsigned int cmd,
@@ -1177,7 +1213,6 @@ static void vmw_master_destroy(struct drm_device *dev,
 	master->driver_priv = NULL;
 	kfree(vmaster);
 }
-
 
 static int vmw_master_set(struct drm_device *dev,
 			  struct drm_file *file_priv,

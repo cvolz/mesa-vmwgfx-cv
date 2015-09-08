@@ -1068,7 +1068,7 @@ static inline u32
 svga3dsurface_get_serialized_size(SVGA3dSurfaceFormat format,
 				  surf_size_struct base_level_size,
 				  u32 num_mip_levels,
-				  bool cubemap)
+				  u32 num_layers)
 {
 	const struct svga3d_surface_desc *desc = svga3dsurface_get_desc(format);
 	u32 total_size = 0;
@@ -1081,10 +1081,7 @@ svga3dsurface_get_serialized_size(SVGA3dSurfaceFormat format,
 								  &size, 0);
 	}
 
-	if (cubemap)
-		total_size *= SVGA3D_MAX_SURFACE_FACES;
-
-	return total_size;
+	return total_size * num_layers;
 }
 
 

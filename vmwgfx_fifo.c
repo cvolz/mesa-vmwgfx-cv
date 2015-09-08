@@ -29,6 +29,11 @@
 #include "drmP.h"
 #include "ttm/ttm_placement.h"
 
+struct vmw_temp_set_context {
+	SVGA3dCmdHeader header;
+	SVGA3dCmdDXTempSetContext body;
+};
+
 bool vmw_fifo_have_3d(struct vmw_private *dev_priv)
 {
 	__le32 __iomem *fifo_mem = dev_priv->mmio_virt;
@@ -105,6 +110,7 @@ int vmw_fifo_init(struct vmw_private *dev_priv, struct vmw_fifo_state *fifo)
 	uint32_t max;
 	uint32_t min;
 
+	fifo->dx = false;
 	fifo->static_buffer_size = VMWGFX_FIFO_STATIC_SIZE;
 	fifo->static_buffer = vmalloc(fifo->static_buffer_size);
 	if (unlikely(fifo->static_buffer == NULL))
@@ -401,15 +407,20 @@ out_err:
 	return NULL;
 }
 
-void *vmw_fifo_reserve(struct vmw_private *dev_priv, uint32_t bytes)
+void *vmw_fifo_reserve_dx(struct vmw_private *dev_priv, uint32_t bytes,
+			  int ctx_id)
 {
 	void *ret;
 
 	if (dev_priv->cman)
 		ret = vmw_cmdbuf_reserve(dev_priv->cman, bytes,
-					 SVGA3D_INVALID_ID, false, NULL);
-	else
+					 ctx_id, false, NULL);
+	else if (ctx_id == SVGA3D_INVALID_ID)
 		ret = vmw_local_fifo_reserve(dev_priv, bytes);
+	else {
+		WARN_ON("Command buffer has not been allocated.\n");
+		ret = NULL;
+	}
 	if (IS_ERR_OR_NULL(ret)) {
 		DRM_ERROR("Fifo reserve failure of %u bytes.\n",
 			  (unsigned) bytes);
@@ -471,6 +482,10 @@ void vmw_local_fifo_commit(struct vmw_private *dev_priv, uint32_t bytes)
 	uint32_t min = ioread32(fifo_mem + SVGA_FIFO_MIN);
 	bool reserveable = fifo_state->capabilities & SVGA_FIFO_CAP_RESERVE;
 
+	if (fifo_state->dx)
+		bytes += sizeof(struct vmw_temp_set_context);
+
+	fifo_state->dx = false;
 	BUG_ON((bytes & 3) != 0);
 	BUG_ON(bytes > fifo_state->reserved_size);
 
@@ -523,7 +538,7 @@ void vmw_fifo_commit(struct vmw_private *dev_priv, uint32_t bytes)
  * @dev_priv: Pointer to device private structure.
  * @bytes: Number of bytes to commit.
  */
-static void vmw_fifo_commit_flush(struct vmw_private *dev_priv, uint32_t bytes)
+void vmw_fifo_commit_flush(struct vmw_private *dev_priv, uint32_t bytes)
 {
 	if (dev_priv->cman)
 		vmw_cmdbuf_commit(dev_priv->cman, bytes, NULL, true);
@@ -712,4 +727,9 @@ int vmw_fifo_emit_dummy_query(struct vmw_private *dev_priv,
 		return vmw_fifo_emit_dummy_gb_query(dev_priv, cid);
 
 	return vmw_fifo_emit_dummy_legacy_query(dev_priv, cid);
+}
+
+void *vmw_fifo_reserve(struct vmw_private *dev_priv, uint32_t bytes)
+{
+	return vmw_fifo_reserve_dx(dev_priv, bytes, SVGA3D_INVALID_ID);
 }
