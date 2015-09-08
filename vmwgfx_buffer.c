@@ -774,9 +774,9 @@ static int vmw_sync_obj_wait(void *sync_obj, void *sync_arg,
 /**
  * vmw_move_notify - TTM move_notify_callback
  *
- * @bo:             The TTM buffer object about to move.
- * @mem:            The truct ttm_mem_reg indicating to what memory
- *                  region the move is taking place.
+ * @bo: The TTM buffer object about to move.
+ * @mem: The struct ttm_mem_reg indicating to what memory
+ *       region the move is taking place.
  *
  * Calls move_notify for all subsystems needing it.
  * (currently only resources).
@@ -785,13 +785,14 @@ static void vmw_move_notify(struct ttm_buffer_object *bo,
 			    struct ttm_mem_reg *mem)
 {
 	vmw_resource_move_notify(bo, mem);
+	vmw_query_move_notify(bo, mem);
 }
 
 
 /**
  * vmw_swap_notify - TTM move_notify_callback
  *
- * @bo:             The TTM buffer object about to be swapped out.
+ * @bo: The TTM buffer object about to be swapped out.
  */
 static void vmw_swap_notify(struct ttm_buffer_object *bo)
 {
