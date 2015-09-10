@@ -741,12 +741,8 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	ttm_lock_set_kill(&dev_priv->fbdev_master.lock, false, SIGTERM);
 	dev_priv->active_master = &dev_priv->fbdev_master;
 
-
-	dev_priv->mmio_mtrr = drm_mtrr_add(dev_priv->mmio_start,
-					   dev_priv->mmio_size, DRM_MTRR_WC);
-
-	dev_priv->mmio_virt = ioremap_wc(dev_priv->mmio_start,
-					 dev_priv->mmio_size);
+	dev_priv->mmio_virt = ioremap_cache(dev_priv->mmio_start,
+					    dev_priv->mmio_size);
 
 	if (unlikely(dev_priv->mmio_virt == NULL)) {
 		ret = -ENOMEM;
@@ -912,9 +908,6 @@ out_no_device:
 out_err4:
 	iounmap(dev_priv->mmio_virt);
 out_err3:
-	drm_mtrr_del(dev_priv->mmio_mtrr, dev_priv->mmio_start,
-		     dev_priv->mmio_size, DRM_MTRR_WC);
-
 	vmw_ttm_global_release(dev_priv);
 out_err0:
 	for (i = vmw_res_context; i < vmw_res_max; ++i)
@@ -969,8 +962,6 @@ static int vmw_driver_unload(struct drm_device *dev)
 
 	ttm_object_device_release(&dev_priv->tdev);
 	iounmap(dev_priv->mmio_virt);
-	drm_mtrr_del(dev_priv->mmio_mtrr, dev_priv->mmio_start,
-		     dev_priv->mmio_size, DRM_MTRR_WC);
 	if (dev_priv->ctx.staged_bindings)
 		vmw_binding_state_free(dev_priv->ctx.staged_bindings);
 	vmw_ttm_global_release(dev_priv);
