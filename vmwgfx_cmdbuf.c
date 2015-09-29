@@ -674,6 +674,7 @@ static bool vmw_cmdbuf_try_alloc(struct vmw_cmdbuf_man *man,
 	if (info->node)
 		return true;
 
+retry:
 	ret = drm_mm_pre_get(&man->mm);
 	if (ret) {
 		info->ret = ret;
@@ -681,10 +682,25 @@ static bool vmw_cmdbuf_try_alloc(struct vmw_cmdbuf_man *man,
 	}
 	spin_lock_bh(&man->lock);
 	info->node = drm_mm_search_free(&man->mm, info->page_size, 0, 0);
-	if (info->node)
-		info->node = drm_mm_get_block_generic(info->node,
-						      info->page_size,
-						      0, 1);
+	if (!info->node) {
+		(void) vmw_cmdbuf_man_process(man);
+		info->node = drm_mm_search_free(&man->mm, info->page_size,
+						0, 0);
+		if (!info->node)
+			goto out_unlock;
+	}
+
+	info->node = drm_mm_get_block_generic(info->node,
+					      info->page_size,
+					      0, 1);
+
+	/* Atomic kmalloc failed? Preload and retry.*/
+	if (!info->node) {
+		spin_unlock_bh(&man->lock);
+		goto retry;
+	}
+
+out_unlock:
 	spin_unlock_bh(&man->lock);
 
 	return !!info->node;
