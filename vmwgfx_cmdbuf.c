@@ -414,16 +414,16 @@ static void vmw_cmdbuf_ctx_process(struct vmw_cmdbuf_man *man,
  *
  * Calls vmw_cmdbuf_ctx_process() on all contexts. If any context has
  * command buffers left that are not submitted to hardware, Make sure
- * IRQ handling is turned on. Otherwise, make sure it's turned off. This
- * function may return -EAGAIN to indicate it should be rerun due to
- * possibly missed IRQs if IRQs has just been turned on.
+ * IRQ handling is turned on. Otherwise, make sure it's turned off.
  */
-static int vmw_cmdbuf_man_process(struct vmw_cmdbuf_man *man)
+static void vmw_cmdbuf_man_process(struct vmw_cmdbuf_man *man)
 {
-	int notempty = 0;
+	int notempty;
 	struct vmw_cmdbuf_context *ctx;
 	int i;
 
+retry:
+	notempty = 0;
 	for_each_cmdbuf_ctx(man, i, ctx)
 		vmw_cmdbuf_ctx_process(man, ctx, &notempty);
 
@@ -439,10 +439,8 @@ static int vmw_cmdbuf_man_process(struct vmw_cmdbuf_man *man)
 		man->irq_on = true;
 
 		/* Rerun in case we just missed an irq. */
-		return -EAGAIN;
+		goto retry;
 	}
-
-	return 0;
 }
 
 /**
@@ -467,8 +465,7 @@ static void vmw_cmdbuf_ctx_add(struct vmw_cmdbuf_man *man,
 	header->cb_context = cb_context;
 	list_add_tail(&header->list, &man->ctx[cb_context].submitted);
 
-	if (vmw_cmdbuf_man_process(man) == -EAGAIN)
-		vmw_cmdbuf_man_process(man);
+	vmw_cmdbuf_man_process(man);
 }
 
 /**
@@ -487,8 +484,7 @@ static void vmw_cmdbuf_man_tasklet(unsigned long data)
 	struct vmw_cmdbuf_man *man = (struct vmw_cmdbuf_man *) data;
 
 	spin_lock(&man->lock);
-	if (vmw_cmdbuf_man_process(man) == -EAGAIN)
-		(void) vmw_cmdbuf_man_process(man);
+	vmw_cmdbuf_man_process(man);
 	spin_unlock(&man->lock);
 }
 
@@ -506,6 +502,7 @@ static void vmw_cmdbuf_work_func(struct work_struct *work)
 	struct vmw_cmdbuf_man *man =
 		container_of(work, struct vmw_cmdbuf_man, work);
 	struct vmw_cmdbuf_header *entry, *next;
+	uint32_t dummy;
 	bool restart = false;
 
 	spin_lock_bh(&man->lock);
@@ -522,6 +519,8 @@ static void vmw_cmdbuf_work_func(struct work_struct *work)
 	if (restart && vmw_cmdbuf_startstop(man, true))
 		DRM_ERROR("Failed restarting command buffer context 0.\n");
 
+	/* Send a new fence in case one was removed */
+	vmw_fifo_send_fence(man->dev_priv, &dummy);
 }
 
 /**
@@ -683,7 +682,7 @@ retry:
 	spin_lock_bh(&man->lock);
 	info->node = drm_mm_search_free(&man->mm, info->page_size, 0, 0);
 	if (!info->node) {
-		(void) vmw_cmdbuf_man_process(man);
+		vmw_cmdbuf_man_process(man);
 		info->node = drm_mm_search_free(&man->mm, info->page_size,
 						0, 0);
 		if (!info->node)
@@ -1187,7 +1186,14 @@ int vmw_cmdbuf_set_pool_size(struct vmw_cmdbuf_man *man,
 		goto out_no_mm;
 
 	man->has_pool = true;
-	man->default_size = default_size;
+
+	/*
+	 * For now, set the default size to VMW_CMDBUF_INLINE_SIZE to
+	 * prevent deadlocks from happening when vmw_cmdbuf_space_pool()
+	 * needs to wait for space and we block on further command
+	 * submissions to be able to free up space.
+	 */
+	man->default_size = VMW_CMDBUF_INLINE_SIZE;
 	DRM_INFO("Using command buffers with %s pool.\n",
 		 (man->using_mob) ? "MOB" : "DMA");
 
