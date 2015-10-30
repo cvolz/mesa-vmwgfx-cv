@@ -488,4 +488,19 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #define smp_mb__after_atomic() smp_mb__after_atomic_inc()
 #endif
 
+/* memremap appeared in 4.3 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
+#define memremap(_offset, _size, _flag)		\
+	(void __force *)ioremap_cache(_offset, _size)
+#define memunmap(_addr)				\
+	iounmap((void __iomem *) _addr)
+#endif
+
+/*
+ * READ_ONCE, WRITE_ONCE appeared in 3.19.
+ * This is a simplified version for scalar use only.
+ */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0))
+#define READ_ONCE(_x) (*(volatile typeof(_x) *)&(_x))
+#define WRITE_ONCE(_x, _val) READ_ONCE(_x) = _val
 #endif
