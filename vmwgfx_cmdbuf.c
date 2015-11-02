@@ -83,7 +83,6 @@ struct vmw_cmdbuf_context {
  * Internal protection.
  * @dheaders: Pool of DMA memory for device command buffer headers with trailing
  * space for inline data. Internal protection.
- * @tasklet: Tasklet struct for irq processing. Immutable.
  * @alloc_queue: Wait queue for processes waiting to allocate command buffer
  * space.
  * @idle_queue: Wait queue for processes waiting for command buffer idle.
@@ -115,7 +114,6 @@ struct vmw_cmdbuf_man {
 	spinlock_t lock;
 	struct dma_pool *headers;
 	struct dma_pool *dheaders;
-	struct tasklet_struct tasklet;
 	wait_queue_head_t alloc_queue;
 	wait_queue_head_t idle_queue;
 	bool irq_on;
@@ -276,9 +274,9 @@ void vmw_cmdbuf_header_free(struct vmw_cmdbuf_header *header)
 		vmw_cmdbuf_header_inline_free(header);
 		return;
 	}
-	spin_lock_bh(&man->lock);
+	spin_lock(&man->lock);
 	__vmw_cmdbuf_header_free(header);
-	spin_unlock_bh(&man->lock);
+	spin_unlock(&man->lock);
 }
 
 
@@ -469,20 +467,17 @@ static void vmw_cmdbuf_ctx_add(struct vmw_cmdbuf_man *man,
 }
 
 /**
- * vmw_cmdbuf_man_tasklet - The main part of the command buffer interrupt
- * handler implemented as a tasklet.
+ * vmw_cmdbuf_irqthread - The main part of the command buffer interrupt
+ * handler.
  *
- * @data: Tasklet closure. A pointer to the command buffer manager cast to
- * an unsigned long.
+ * @man: A pointer to the command buffer manager
  *
- * The bottom half (tasklet) of the interrupt handler simply calls into the
+ * The main portion of the interrupt handler simply calls into the
  * command buffer processor to free finished buffers and submit any
  * queued buffers to hardware.
  */
-static void vmw_cmdbuf_man_tasklet(unsigned long data)
+void vmw_cmdbuf_irqthread(struct vmw_cmdbuf_man *man)
 {
-	struct vmw_cmdbuf_man *man = (struct vmw_cmdbuf_man *) data;
-
 	spin_lock(&man->lock);
 	vmw_cmdbuf_man_process(man);
 	spin_unlock(&man->lock);
@@ -505,7 +500,7 @@ static void vmw_cmdbuf_work_func(struct work_struct *work)
 	uint32_t dummy;
 	bool restart = false;
 
-	spin_lock_bh(&man->lock);
+	spin_lock(&man->lock);
 	list_for_each_entry_safe(entry, next, &man->error, list) {
 		restart = true;
 		DRM_ERROR("Command buffer error.\n");
@@ -514,7 +509,7 @@ static void vmw_cmdbuf_work_func(struct work_struct *work)
 		__vmw_cmdbuf_header_free(entry);
 		wake_up_all(&man->idle_queue);
 	}
-	spin_unlock_bh(&man->lock);
+	spin_unlock(&man->lock);
 
 	if (restart && vmw_cmdbuf_startstop(man, true))
 		DRM_ERROR("Failed restarting command buffer context 0.\n");
@@ -537,7 +532,7 @@ static bool vmw_cmdbuf_man_idle(struct vmw_cmdbuf_man *man,
 	bool idle = false;
 	int i;
 
-	spin_lock_bh(&man->lock);
+	spin_lock(&man->lock);
 	vmw_cmdbuf_man_process(man);
 	for_each_cmdbuf_ctx(man, i, ctx) {
 		if (!list_empty(&ctx->submitted) ||
@@ -549,7 +544,7 @@ static bool vmw_cmdbuf_man_idle(struct vmw_cmdbuf_man *man,
 	idle = list_empty(&man->error);
 
 out_unlock:
-	spin_unlock_bh(&man->lock);
+	spin_unlock(&man->lock);
 
 	return idle;
 }
@@ -572,7 +567,7 @@ static void __vmw_cmdbuf_cur_flush(struct vmw_cmdbuf_man *man)
 	if (!cur)
 		return;
 
-	spin_lock_bh(&man->lock);
+	spin_lock(&man->lock);
 	if (man->cur_pos == 0) {
 		__vmw_cmdbuf_header_free(cur);
 		goto out_unlock;
@@ -581,7 +576,7 @@ static void __vmw_cmdbuf_cur_flush(struct vmw_cmdbuf_man *man)
 	man->cur->cb_header->length = man->cur_pos;
 	vmw_cmdbuf_ctx_add(man, man->cur, SVGA_CB_CONTEXT_0);
 out_unlock:
-	spin_unlock_bh(&man->lock);
+	spin_unlock(&man->lock);
 	man->cur = NULL;
 	man->cur_pos = 0;
 }
@@ -679,7 +674,7 @@ retry:
 		info->ret = ret;
 		return true;
 	}
-	spin_lock_bh(&man->lock);
+	spin_lock(&man->lock);
 	info->node = drm_mm_search_free(&man->mm, info->page_size, 0, 0);
 	if (!info->node) {
 		vmw_cmdbuf_man_process(man);
@@ -695,12 +690,12 @@ retry:
 
 	/* Atomic kmalloc failed? Preload and retry.*/
 	if (!info->node) {
-		spin_unlock_bh(&man->lock);
+		spin_unlock(&man->lock);
 		goto retry;
 	}
 
 out_unlock:
-	spin_unlock_bh(&man->lock);
+	spin_unlock(&man->lock);
 
 	return !!info->node;
 }
@@ -827,9 +822,9 @@ static int vmw_cmdbuf_space_pool(struct vmw_cmdbuf_man *man,
 	return 0;
 
 out_no_cb_header:
-	spin_lock_bh(&man->lock);
+	spin_lock(&man->lock);
 	drm_mm_put_block(header->node);
-	spin_unlock_bh(&man->lock);
+	spin_unlock(&man->lock);
 
 	return ret;
 }
@@ -1051,19 +1046,6 @@ void vmw_cmdbuf_commit(struct vmw_cmdbuf_man *man, size_t size,
 }
 
 /**
- * vmw_cmdbuf_tasklet_schedule - Schedule the interrupt handler bottom half.
- *
- * @man: The command buffer manager.
- */
-void vmw_cmdbuf_tasklet_schedule(struct vmw_cmdbuf_man *man)
-{
-	if (!man)
-		return;
-
-	tasklet_schedule(&man->tasklet);
-}
-
-/**
  * vmw_cmdbuf_send_device_command - Send a command through the device context.
  *
  * @man: The command buffer manager.
@@ -1086,9 +1068,9 @@ static int vmw_cmdbuf_send_device_command(struct vmw_cmdbuf_man *man,
 	memcpy(cmd, command, size);
 	header->cb_header->length = size;
 	header->cb_context = SVGA_CB_CONTEXT_DEVICE;
-	spin_lock_bh(&man->lock);
+	spin_lock(&man->lock);
 	status = vmw_cmdbuf_header_submit(header);
-	spin_unlock_bh(&man->lock);
+	spin_unlock(&man->lock);
 	vmw_cmdbuf_header_free(header);
 
 	if (status != SVGA_CB_STATUS_COMPLETED) {
@@ -1261,8 +1243,6 @@ struct vmw_cmdbuf_man *vmw_cmdbuf_man_create(struct vmw_private *dev_priv)
 	spin_lock_init(&man->lock);
 	mutex_init(&man->cur_mutex);
 	mutex_init(&man->space_mutex);
-	tasklet_init(&man->tasklet, vmw_cmdbuf_man_tasklet,
-		     (unsigned long) man);
 	man->default_size = VMW_CMDBUF_INLINE_SIZE;
 	init_waitqueue_head(&man->alloc_queue);
 	init_waitqueue_head(&man->idle_queue);
@@ -1332,7 +1312,6 @@ void vmw_cmdbuf_man_destroy(struct vmw_cmdbuf_man *man)
 
 	vmw_generic_waiter_remove(man->dev_priv, SVGA_IRQFLAG_ERROR,
 				  &man->dev_priv->error_waiters);
-	tasklet_kill(&man->tasklet);
 	(void) cancel_work_sync(&man->work);
 	dma_pool_destroy(man->dheaders);
 	dma_pool_destroy(man->headers);

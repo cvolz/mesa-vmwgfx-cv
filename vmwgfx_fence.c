@@ -112,13 +112,13 @@ static void vmw_fence_obj_destroy_locked(struct kref *kref)
 
 	list_del_init(&fence->head);
 	num_fences = --fman->num_fence_objects;
-	spin_unlock_irq(&fman->lock);
+	spin_unlock(&fman->lock);
 	if (fence->destroy)
 		fence->destroy(fence);
 	else
 		kfree(fence);
 
-	spin_lock_irq(&fman->lock);
+	spin_lock(&fman->lock);
 }
 
 
@@ -140,10 +140,10 @@ static void vmw_fence_work_func(struct work_struct *work)
 		INIT_LIST_HEAD(&list);
 		mutex_lock(&fman->goal_irq_mutex);
 
-		spin_lock_irq(&fman->lock);
+		spin_lock(&fman->lock);
 		list_splice_init(&fman->cleanup_list, &list);
 		seqno_valid = fman->seqno_valid;
-		spin_unlock_irq(&fman->lock);
+		spin_unlock(&fman->lock);
 
 		if (!seqno_valid && fman->goal_irq_on) {
 			fman->goal_irq_on = false;
@@ -192,15 +192,14 @@ struct vmw_fence_manager *vmw_fence_manager_init(struct vmw_private *dev_priv)
 
 void vmw_fence_manager_takedown(struct vmw_fence_manager *fman)
 {
-	unsigned long irq_flags;
 	bool lists_empty;
 
 	(void) cancel_work_sync(&fman->work);
 
-	spin_lock_irqsave(&fman->lock, irq_flags);
+	spin_lock(&fman->lock);
 	lists_empty = list_empty(&fman->fence_list) &&
 		list_empty(&fman->cleanup_list);
-	spin_unlock_irqrestore(&fman->lock, irq_flags);
+	spin_unlock(&fman->lock);
 
 	BUG_ON(!lists_empty);
 	kfree(fman);
@@ -212,7 +211,6 @@ static int vmw_fence_obj_init(struct vmw_fence_manager *fman,
 			      uint32_t mask,
 			      void (*destroy) (struct vmw_fence_obj *fence))
 {
-	unsigned long irq_flags;
 	unsigned int num_fences;
 	int ret = 0;
 
@@ -225,7 +223,7 @@ static int vmw_fence_obj_init(struct vmw_fence_manager *fman,
 	fence->destroy = destroy;
 	init_waitqueue_head(&fence->queue);
 
-	spin_lock_irqsave(&fman->lock, irq_flags);
+	spin_lock(&fman->lock);
 	if (unlikely(fman->fifo_down)) {
 		ret = -EBUSY;
 		goto out_unlock;
@@ -234,7 +232,7 @@ static int vmw_fence_obj_init(struct vmw_fence_manager *fman,
 	num_fences = ++fman->num_fence_objects;
 
 out_unlock:
-	spin_unlock_irqrestore(&fman->lock, irq_flags);
+	spin_unlock(&fman->lock);
 	return ret;
 
 }
@@ -265,10 +263,10 @@ void vmw_fence_obj_unreference(struct vmw_fence_obj **fence_p)
 
 	fman = fence->fman;
 	*fence_p = NULL;
-	spin_lock_irq(&fman->lock);
+	spin_lock(&fman->lock);
 	BUG_ON(atomic_read(&fence->kref.refcount) == 0);
 	kref_put(&fence->kref, vmw_fence_obj_destroy_locked);
-	spin_unlock_irq(&fman->lock);
+	spin_unlock(&fman->lock);
 }
 
 void vmw_fences_perform_actions(struct vmw_fence_manager *fman,
@@ -373,7 +371,6 @@ static bool vmw_fence_goal_check_locked(struct vmw_fence_obj *fence)
 
 void vmw_fences_update(struct vmw_fence_manager *fman)
 {
-	unsigned long flags;
 	struct vmw_fence_obj *fence, *next_fence;
 	struct list_head action_list;
 	bool needs_rerun;
@@ -382,7 +379,7 @@ void vmw_fences_update(struct vmw_fence_manager *fman)
 
 	seqno = vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE);
 rerun:
-	spin_lock_irqsave(&fman->lock, flags);
+	spin_lock(&fman->lock);
 	list_for_each_entry_safe(fence, next_fence, &fman->fence_list, head) {
 		if (seqno - fence->seqno < VMW_FENCE_WRAP) {
 			list_del_init(&fence->head);
@@ -400,7 +397,7 @@ rerun:
 
 	if (!list_empty(&fman->cleanup_list))
 		(void) schedule_work(&fman->work);
-	spin_unlock_irqrestore(&fman->lock, flags);
+	spin_unlock(&fman->lock);
 
 	/*
 	 * Rerun if the fence goal seqno was updated, and the
@@ -421,12 +418,11 @@ bool vmw_fence_obj_signaled(struct vmw_fence_obj *fence,
 			    uint32_t flags)
 {
 	struct vmw_fence_manager *fman = fence->fman;
-	unsigned long irq_flags;
 	uint32_t signaled;
 
-	spin_lock_irqsave(&fman->lock, irq_flags);
+	spin_lock(&fman->lock);
 	signaled = fence->signaled;
-	spin_unlock_irqrestore(&fman->lock, irq_flags);
+	spin_unlock(&fman->lock);
 
 	flags &= fence->signal_mask;
 	if ((signaled & flags) == flags)
@@ -435,9 +431,9 @@ bool vmw_fence_obj_signaled(struct vmw_fence_obj *fence,
 	if ((signaled & DRM_VMW_FENCE_FLAG_EXEC) == 0)
 		vmw_fences_update(fman);
 
-	spin_lock_irqsave(&fman->lock, irq_flags);
+	spin_lock(&fman->lock);
 	signaled = fence->signaled;
-	spin_unlock_irqrestore(&fman->lock, irq_flags);
+	spin_unlock(&fman->lock);
 
 	return ((signaled & flags) == flags);
 }
@@ -612,7 +608,6 @@ out_no_object:
 
 void vmw_fence_fifo_down(struct vmw_fence_manager *fman)
 {
-	unsigned long irq_flags;
 	struct list_head action_list;
 	int ret;
 
@@ -621,14 +616,14 @@ void vmw_fence_fifo_down(struct vmw_fence_manager *fman)
 	 * restart when we've released the fman->lock.
 	 */
 
-	spin_lock_irqsave(&fman->lock, irq_flags);
+	spin_lock(&fman->lock);
 	fman->fifo_down = true;
 	while (!list_empty(&fman->fence_list)) {
 		struct vmw_fence_obj *fence =
 			list_entry(fman->fence_list.prev, struct vmw_fence_obj,
 				   head);
 		kref_get(&fence->kref);
-		spin_unlock_irq(&fman->lock);
+		spin_unlock(&fman->lock);
 
 		ret = vmw_fence_obj_wait(fence, fence->signal_mask,
 					 false, false,
@@ -644,21 +639,19 @@ void vmw_fence_fifo_down(struct vmw_fence_manager *fman)
 			wake_up_all(&fence->queue);
 		}
 
-		spin_lock_irq(&fman->lock);
+		spin_lock(&fman->lock);
 
 		BUG_ON(!list_empty(&fence->head));
 		kref_put(&fence->kref, vmw_fence_obj_destroy_locked);
 	}
-	spin_unlock_irqrestore(&fman->lock, irq_flags);
+	spin_unlock(&fman->lock);
 }
 
 void vmw_fence_fifo_up(struct vmw_fence_manager *fman)
 {
-	unsigned long irq_flags;
-
-	spin_lock_irqsave(&fman->lock, irq_flags);
+	spin_lock(&fman->lock);
 	fman->fifo_down = false;
-	spin_unlock_irqrestore(&fman->lock, irq_flags);
+	spin_unlock(&fman->lock);
 }
 
 
@@ -744,11 +737,11 @@ int vmw_fence_obj_signaled_ioctl(struct drm_device *dev, void *data,
 	fman = fence->fman;
 
 	arg->signaled = vmw_fence_obj_signaled(fence, arg->flags);
-	spin_lock_irq(&fman->lock);
+	spin_lock(&fman->lock);
 
 	arg->signaled_flags = fence->signaled;
 	arg->passed_seqno = dev_priv->last_read_seqno;
-	spin_unlock_irq(&fman->lock);
+	spin_unlock(&fman->lock);
 
 	ttm_base_object_unref(&base);
 
@@ -785,10 +778,9 @@ void vmw_event_fence_fpriv_gone(struct vmw_fence_manager *fman,
 {
 	struct vmw_event_fence_action *eaction;
 	struct drm_pending_event *event;
-	unsigned long irq_flags;
 
 	while (1) {
-		spin_lock_irqsave(&fman->lock, irq_flags);
+		spin_lock(&fman->lock);
 		if (list_empty(event_list))
 			goto out_unlock;
 		eaction = list_first_entry(event_list,
@@ -797,11 +789,11 @@ void vmw_event_fence_fpriv_gone(struct vmw_fence_manager *fman,
 		list_del_init(&eaction->fpriv_head);
 		event = eaction->event;
 		eaction->event = NULL;
-		spin_unlock_irqrestore(&fman->lock, irq_flags);
+		spin_unlock(&fman->lock);
 		event->destroy(event);
 	}
 out_unlock:
-	spin_unlock_irqrestore(&fman->lock, irq_flags);
+	spin_unlock(&fman->lock);
 }
 
 
@@ -823,13 +815,12 @@ static void vmw_event_fence_action_seq_passed(struct vmw_fence_action *action)
 	struct drm_device *dev = eaction->dev;
 	struct drm_pending_event *event = eaction->event;
 	struct drm_file *file_priv;
-	unsigned long irq_flags;
 
 	if (unlikely(event == NULL))
 		return;
 
 	file_priv = event->file_priv;
-	spin_lock_irqsave(&dev->event_lock, irq_flags);
+	spin_lock(&dev->event_lock);
 
 	if (likely(eaction->tv_sec != NULL)) {
 		struct timeval tv;
@@ -843,7 +834,7 @@ static void vmw_event_fence_action_seq_passed(struct vmw_fence_action *action)
 	list_add_tail(&eaction->event->link, &file_priv->event_list);
 	eaction->event = NULL;
 	wake_up_all(&file_priv->event_wait);
-	spin_unlock_irqrestore(&dev->event_lock, irq_flags);
+	spin_unlock(&dev->event_lock);
 }
 
 /**
@@ -860,11 +851,10 @@ static void vmw_event_fence_action_cleanup(struct vmw_fence_action *action)
 	struct vmw_event_fence_action *eaction =
 		container_of(action, struct vmw_event_fence_action, action);
 	struct vmw_fence_manager *fman = eaction->fence->fman;
-	unsigned long irq_flags;
 
-	spin_lock_irqsave(&fman->lock, irq_flags);
+	spin_lock(&fman->lock);
 	list_del(&eaction->fpriv_head);
-	spin_unlock_irqrestore(&fman->lock, irq_flags);
+	spin_unlock(&fman->lock);
 
 	vmw_fence_obj_unreference(&eaction->fence);
 	kfree(eaction);
@@ -884,11 +874,10 @@ void vmw_fence_obj_add_action(struct vmw_fence_obj *fence,
 			      struct vmw_fence_action *action)
 {
 	struct vmw_fence_manager *fman = fence->fman;
-	unsigned long irq_flags;
 	bool run_update = false;
 
 	mutex_lock(&fman->goal_irq_mutex);
-	spin_lock_irqsave(&fman->lock, irq_flags);
+	spin_lock(&fman->lock);
 
 	fman->pending_actions[action->type]++;
 	if (fence->signaled & DRM_VMW_FENCE_FLAG_EXEC) {
@@ -907,7 +896,7 @@ void vmw_fence_obj_add_action(struct vmw_fence_obj *fence,
 		run_update = vmw_fence_goal_check_locked(fence);
 	}
 
-	spin_unlock_irqrestore(&fman->lock, irq_flags);
+	spin_unlock(&fman->lock);
 
 	if (run_update) {
 		if (!fman->goal_irq_on) {
@@ -945,7 +934,6 @@ int vmw_event_fence_action_queue(struct drm_file *file_priv,
 	struct vmw_event_fence_action *eaction;
 	struct vmw_fence_manager *fman = fence->fman;
 	struct vmw_fpriv *vmw_fp = vmw_fpriv(file_priv);
-	unsigned long irq_flags;
 
 	eaction = kzalloc(sizeof(*eaction), GFP_KERNEL);
 	if (unlikely(eaction == NULL))
@@ -962,9 +950,9 @@ int vmw_event_fence_action_queue(struct drm_file *file_priv,
 	eaction->tv_sec = tv_sec;
 	eaction->tv_usec = tv_usec;
 
-	spin_lock_irqsave(&fman->lock, irq_flags);
+	spin_lock(&fman->lock);
 	list_add_tail(&eaction->fpriv_head, &vmw_fp->fence_events);
-	spin_unlock_irqrestore(&fman->lock, irq_flags);
+	spin_unlock(&fman->lock);
 
 	vmw_fence_obj_add_action(fence, &eaction->action);
 
@@ -985,16 +973,15 @@ int vmw_event_fence_action_create(struct drm_file *file_priv,
 {
 	struct vmw_event_fence_pending *event;
 	struct drm_device *dev = fence->fman->dev_priv->dev;
-	unsigned long irq_flags;
 	int ret;
 
-	spin_lock_irqsave(&dev->event_lock, irq_flags);
+	spin_lock(&dev->event_lock);
 
 	ret = (file_priv->event_space < sizeof(event->event)) ? -EBUSY : 0;
 	if (likely(ret == 0))
 		file_priv->event_space -= sizeof(event->event);
 
-	spin_unlock_irqrestore(&dev->event_lock, irq_flags);
+	spin_unlock(&dev->event_lock);
 
 	if (unlikely(ret != 0)) {
 		DRM_ERROR("Failed to allocate event space for this file.\n");
@@ -1038,9 +1025,9 @@ int vmw_event_fence_action_create(struct drm_file *file_priv,
 out_no_queue:
 	event->base.destroy(&event->base);
 out_no_event:
-	spin_lock_irqsave(&dev->event_lock, irq_flags);
+	spin_lock(&dev->event_lock);
 	file_priv->event_space += sizeof(*event);
-	spin_unlock_irqrestore(&dev->event_lock, irq_flags);
+	spin_unlock(&dev->event_lock);
 out_no_space:
 	return ret;
 }

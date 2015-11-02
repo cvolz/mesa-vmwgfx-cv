@@ -30,11 +30,43 @@
 
 #define VMW_FENCE_WRAP (1 << 24)
 
+/**
+ * vmw_thread_fn - Deferred (process context) irq handler
+ *
+ * @irq: irq number
+ * @arg: Closure argument. Pointer to a struct drm_device cast to void *
+ *
+ * This function implements the deferred part of irq processing.
+ * The function is guaranteed to run at least once after the
+ * vmw_irq_handler has returned with IRQ_WAKE_THREAD.
+ *
+ * This function always returns IRQ_HANDLED regardless of whether it
+ * actually did any work.
+ */
+irqreturn_t vmw_thread_fn(int irq, void *arg)
+{
+	struct drm_device *dev = (struct drm_device *)arg;
+	struct vmw_private *dev_priv = vmw_priv(dev);
+
+	if (test_and_clear_bit(VMW_IRQTHREAD_FENCE,
+			       dev_priv->irqthread_pending)) {
+		vmw_fences_update(dev_priv->fman);
+		wake_up_all(&dev_priv->fence_queue);
+	}
+
+	if (test_and_clear_bit(VMW_IRQTHREAD_CMDBUF,
+			       dev_priv->irqthread_pending))
+		vmw_cmdbuf_irqthread(dev_priv->cman);
+
+	return IRQ_HANDLED;
+}
+
 irqreturn_t vmw_irq_handler(DRM_IRQ_ARGS)
 {
 	struct drm_device *dev = (struct drm_device *)arg;
 	struct vmw_private *dev_priv = vmw_priv(dev);
 	uint32_t status, masked_status;
+	irqreturn_t ret = IRQ_HANDLED;
 
 	status = inl(dev_priv->io_start + VMWGFX_IRQSTATUS_PORT);
 	masked_status = status & READ_ONCE(dev_priv->irq_mask);
@@ -45,20 +77,21 @@ irqreturn_t vmw_irq_handler(DRM_IRQ_ARGS)
 	if (!status)
 		return IRQ_NONE;
 
-	if (masked_status & (SVGA_IRQFLAG_ANY_FENCE |
-			     SVGA_IRQFLAG_FENCE_GOAL)) {
-		vmw_fences_update(dev_priv->fman);
-		wake_up_all(&dev_priv->fence_queue);
-	}
-
 	if (masked_status & SVGA_IRQFLAG_FIFO_PROGRESS)
 		wake_up_all(&dev_priv->fifo_queue);
 
-	if (masked_status & (SVGA_IRQFLAG_COMMAND_BUFFER |
-			     SVGA_IRQFLAG_ERROR))
-		vmw_cmdbuf_tasklet_schedule(dev_priv->cman);
+	if ((masked_status & (SVGA_IRQFLAG_ANY_FENCE |
+			      SVGA_IRQFLAG_FENCE_GOAL)) &&
+	    !test_and_set_bit(VMW_IRQTHREAD_FENCE, dev_priv->irqthread_pending))
+		ret = IRQ_WAKE_THREAD;
 
-	return IRQ_HANDLED;
+	if ((masked_status & (SVGA_IRQFLAG_COMMAND_BUFFER |
+			      SVGA_IRQFLAG_ERROR)) &&
+	    !test_and_set_bit(VMW_IRQTHREAD_CMDBUF,
+			      dev_priv->irqthread_pending))
+		ret = IRQ_WAKE_THREAD;
+
+	return ret;
 }
 
 static bool vmw_fifo_idle(struct vmw_private *dev_priv, uint32_t seqno)
