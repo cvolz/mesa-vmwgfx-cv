@@ -311,14 +311,14 @@ static bool vmw_fence_goal_new_locked(struct vmw_fence_manager *fman,
 				      u32 passed_seqno)
 {
 	u32 goal_seqno;
-	__le32 __iomem *fifo_mem;
+	u32 *fifo_mem;
 	struct vmw_fence_obj *fence;
 
 	if (likely(!fman->seqno_valid))
 		return false;
 
 	fifo_mem = fman->dev_priv->mmio_virt;
-	goal_seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE_GOAL);
+	goal_seqno = vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE_GOAL);
 	if (likely(passed_seqno - goal_seqno >= VMW_FENCE_WRAP))
 		return false;
 
@@ -326,8 +326,8 @@ static bool vmw_fence_goal_new_locked(struct vmw_fence_manager *fman,
 	list_for_each_entry(fence, &fman->fence_list, head) {
 		if (!list_empty(&fence->seq_passed_actions)) {
 			fman->seqno_valid = true;
-			iowrite32(fence->seqno,
-				  fifo_mem + SVGA_FIFO_FENCE_GOAL);
+			vmw_mmio_write(fence->seqno,
+				       fifo_mem + SVGA_FIFO_FENCE_GOAL);
 			break;
 		}
 	}
@@ -354,18 +354,18 @@ static bool vmw_fence_goal_new_locked(struct vmw_fence_manager *fman,
 static bool vmw_fence_goal_check_locked(struct vmw_fence_obj *fence)
 {
 	u32 goal_seqno;
-	__le32 __iomem *fifo_mem;
+	u32 *fifo_mem;
 
 	if (fence->signaled & DRM_VMW_FENCE_FLAG_EXEC)
 		return false;
 
 	fifo_mem = fence->fman->dev_priv->mmio_virt;
-	goal_seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE_GOAL);
+	goal_seqno = vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE_GOAL);
 	if (likely(fence->fman->seqno_valid &&
 		   goal_seqno - fence->seqno < VMW_FENCE_WRAP))
 		return false;
 
-	iowrite32(fence->seqno, fifo_mem + SVGA_FIFO_FENCE_GOAL);
+	vmw_mmio_write(fence->seqno, fifo_mem + SVGA_FIFO_FENCE_GOAL);
 	fence->fman->seqno_valid = true;
 
 	return true;
@@ -378,9 +378,9 @@ void vmw_fences_update(struct vmw_fence_manager *fman)
 	struct list_head action_list;
 	bool needs_rerun;
 	uint32_t seqno, new_seqno;
-	__le32 __iomem *fifo_mem = fman->dev_priv->mmio_virt;
+	u32 *fifo_mem = fman->dev_priv->mmio_virt;
 
-	seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE);
+	seqno = vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE);
 rerun:
 	spin_lock_irqsave(&fman->lock, flags);
 	list_for_each_entry_safe(fence, next_fence, &fman->fence_list, head) {
@@ -409,7 +409,7 @@ rerun:
 	 */
 
 	if (unlikely(needs_rerun)) {
-		new_seqno = ioread32(fifo_mem + SVGA_FIFO_FENCE);
+		new_seqno = vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE);
 		if (new_seqno != seqno) {
 			seqno = new_seqno;
 			goto rerun;
