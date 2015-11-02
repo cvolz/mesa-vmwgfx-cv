@@ -504,3 +504,5 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #define READ_ONCE(_x) (*(volatile typeof(_x) *)&(_x))
 #define WRITE_ONCE(_x, _val) READ_ONCE(_x) = _val
 #endif
+
+#endif
