@@ -332,8 +332,10 @@ int drm_irq_install(struct drm_device *dev)
 	else
 		irqname = dev->driver->name;
 
-	ret = request_irq(drm_dev_to_irq(dev), dev->driver->irq_handler,
-			  sh_flags, irqname, dev);
+	ret = request_threaded_irq(drm_dev_to_irq(dev),
+				   dev->driver->irq_handler,
+				   dev->driver->irq_thread_fn,
+				   sh_flags, irqname, dev);
 
 	if (ret < 0) {
 		mutex_lock(&dev->struct_mutex);
