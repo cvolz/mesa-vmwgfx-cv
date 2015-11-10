@@ -145,7 +145,8 @@ drm_edid_block_valid(u8 *raw_edid)
 			if (raw_edid[i] == edid_header[i])
 				score++;
 
-		if (score == 8) ;
+		if (score == 8)
+			;
 		else if (score >= 6) {
 			DRM_DEBUG("Fixing EDID header, your hardware may be failing\n");
 			memcpy(raw_edid, edid_header, sizeof(edid_header));

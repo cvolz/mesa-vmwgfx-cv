@@ -402,7 +402,8 @@ static void drm_master_release(struct drm_device *dev, struct file *filp)
 	}
 
 
-	if (drm_i_have_hw_lock(dev, file_priv)) {
+	if (file_priv->master->lock.hw_lock &&
+	    drm_i_have_hw_lock(dev, file_priv)) {
 		DRM_DEBUG("File %p released, freeing lock for context %d\n",
 			  filp, _DRM_LOCKING_CONTEXT(file_priv->master->lock.hw_lock->lock));
 		drm_lock_free(&file_priv->master->lock,

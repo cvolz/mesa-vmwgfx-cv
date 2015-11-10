@@ -78,7 +78,7 @@ int drm_lock(struct drm_device *dev, void *data, struct drm_file *file_priv)
 
 	for (;;) {
 		__set_current_state(TASK_INTERRUPTIBLE);
-		if (!master->lock.hw_lock) {
+		if (!READ_ONCE(master->lock.hw_lock)) {
 			/* Device has been unregistered */
 			send_sig(SIGTERM, current, 0);
 			ret = -EINTR;
