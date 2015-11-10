@@ -236,7 +236,7 @@ static void drm_vm_shm_close(struct vm_area_struct *vma)
 			switch (map->type) {
 			case _DRM_REGISTERS:
 			case _DRM_FRAME_BUFFER:
-				iounmap(map->handle);
+				iounmap((void __iomem *)map->handle);
 				break;
 			case _DRM_SHM:
 				vfree(map->handle);

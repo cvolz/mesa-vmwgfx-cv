@@ -94,8 +94,8 @@ static const struct file_operations drm_proc_fops = {
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,32)
 
-int drm_proc_create_files(struct drm_info_list *files, int count,
-			  struct proc_dir_entry *root, struct drm_minor *minor)
+static int drm_proc_create_files(struct drm_info_list *files, int count,
+				 struct proc_dir_entry *root, struct drm_minor *minor)
 {
 	struct drm_device *dev = minor->dev;
 	struct proc_dir_entry *ent;
@@ -234,8 +234,8 @@ int drm_proc_init(struct drm_minor *minor, int minor_id,
 	return 0;
 }
 
-int drm_proc_remove_files(struct drm_info_list *files, int count,
-			  struct drm_minor *minor)
+static int drm_proc_remove_files(struct drm_info_list *files, int count,
+				 struct drm_minor *minor)
 {
 	struct list_head *pos, *q;
 	struct drm_info_node *tmp;

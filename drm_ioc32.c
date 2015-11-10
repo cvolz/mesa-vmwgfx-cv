@@ -454,7 +454,7 @@ static int compat_drm_infobufs(struct file *file, unsigned int cmd,
 	request = compat_alloc_user_space(nbytes);
 	if (!access_ok(VERIFY_WRITE, request, nbytes))
 		return -EFAULT;
-	list = (struct drm_buf_desc *) (request + 1);
+	list = (struct drm_buf_desc __user *) (request + 1);
 
 	if (__put_user(count, &request->count)
 	    || __put_user(list, &request->list))
@@ -515,7 +515,7 @@ static int compat_drm_mapbufs(struct file *file, unsigned int cmd,
 	request = compat_alloc_user_space(nbytes);
 	if (!access_ok(VERIFY_WRITE, request, nbytes))
 		return -EFAULT;
-	list = (struct drm_buf_pub *) (request + 1);
+	list = (struct drm_buf_pub __user *) (request + 1);
 
 	if (__put_user(count, &request->count)
 	    || __put_user(list, &request->list))
@@ -1013,7 +1013,7 @@ static int compat_drm_wait_vblank(struct file *file, unsigned int cmd,
 	return 0;
 }
 
-drm_ioctl_compat_t *drm_compat_ioctls[] = {
+static drm_ioctl_compat_t *drm_compat_ioctls[] = {
 	[DRM_IOCTL_NR(DRM_IOCTL_VERSION32)] = compat_drm_version,
 	[DRM_IOCTL_NR(DRM_IOCTL_GET_UNIQUE32)] = compat_drm_getunique,
 	[DRM_IOCTL_NR(DRM_IOCTL_GET_MAP32)] = compat_drm_getmap,
