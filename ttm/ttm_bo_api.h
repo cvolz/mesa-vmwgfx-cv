@@ -320,6 +320,21 @@ ttm_bo_reference(struct ttm_buffer_object *bo)
 }
 
 /**
+ * ttm_bo_reference_unless_doomed - reference a struct ttm_buffer_object unless
+ * its refcount is zero and it's about to be destroyed.
+ *
+ * @bo: The buffer object.
+ *
+ * returns NULL if unsuccessful, a pointer to the bo otherwise.
+ */
+
+static inline struct ttm_buffer_object * __must_check
+ttm_bo_reference_unless_doomed(struct ttm_buffer_object *bo)
+{
+	return kref_get_unless_zero(&bo->kref) ? bo : NULL;
+}
+
+/**
  * ttm_bo_wait - wait for buffer idle.
  *
  * @bo:  The buffer object.

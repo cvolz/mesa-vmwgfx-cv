@@ -675,6 +675,7 @@ static void ttm_bo_release(struct kref *kref)
 	struct ttm_bo_device *bdev = bo->bdev;
 	struct ttm_mem_type_manager *man = &bdev->man[bo->mem.mem_type];
 
+	write_lock(&bdev->vm_lock);
 	if (likely(bo->vm_node != NULL)) {
 		rb_erase(&bo->vm_rb, &bdev->addr_space_rb);
 		drm_mm_put_block(bo->vm_node);
@@ -686,18 +687,14 @@ static void ttm_bo_release(struct kref *kref)
 	ttm_mem_io_unlock(man);
 	ttm_bo_cleanup_refs_or_queue(bo);
 	kref_put(&bo->list_kref, ttm_bo_release_list);
-	write_lock(&bdev->vm_lock);
 }
 
 void ttm_bo_unref(struct ttm_buffer_object **p_bo)
 {
 	struct ttm_buffer_object *bo = *p_bo;
-	struct ttm_bo_device *bdev = bo->bdev;
 
 	*p_bo = NULL;
-	write_lock(&bdev->vm_lock);
 	kref_put(&bo->kref, ttm_bo_release);
-	write_unlock(&bdev->vm_lock);
 }
 EXPORT_SYMBOL(ttm_bo_unref);
 
@@ -1058,10 +1055,10 @@ int ttm_bo_wait_cpu(struct ttm_buffer_object *bo, bool no_wait)
 }
 EXPORT_SYMBOL(ttm_bo_wait_cpu);
 
-int ttm_bo_move_buffer(struct ttm_buffer_object *bo,
-			struct ttm_placement *placement,
-			bool interruptible, bool no_wait_reserve,
-			bool no_wait_gpu)
+static int ttm_bo_move_buffer(struct ttm_buffer_object *bo,
+			      struct ttm_placement *placement,
+			      bool interruptible, bool no_wait_reserve,
+			      bool no_wait_gpu)
 {
 	int ret = 0;
 	struct ttm_mem_reg mem;
@@ -1696,8 +1693,9 @@ out_unlock:
 	return ret;
 }
 
-int ttm_bo_wait(struct ttm_buffer_object *bo,
-		bool lazy, bool interruptible, bool no_wait)
+int __releases(bdev->fence_lock) __acquires(bdev->fence_lock)
+ttm_bo_wait(struct ttm_buffer_object *bo,
+	    bool lazy, bool interruptible, bool no_wait)
 {
 	struct ttm_bo_driver *driver = bo->bdev->driver;
 	struct ttm_bo_device *bdev = bo->bdev;

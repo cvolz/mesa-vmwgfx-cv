@@ -383,7 +383,7 @@ int ttm_ref_object_add(struct ttm_object_file *tfile,
 }
 EXPORT_SYMBOL(ttm_ref_object_add);
 
-static void ttm_ref_object_release(struct kref *kref)
+static void __releases(tfile->lock) __acquires(tfile_lock) ttm_ref_object_release(struct kref *kref)
 {
 	struct ttm_ref_object *ref =
 	    container_of(kref, struct ttm_ref_object, kref);

@@ -181,8 +181,8 @@ void ttm_mem_io_free_vm(struct ttm_buffer_object *bo)
 	}
 }
 
-int ttm_mem_reg_ioremap(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem,
-			void **virtual)
+static int ttm_mem_reg_ioremap(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem,
+			       void **virtual)
 {
 	struct ttm_mem_type_manager *man = &bdev->man[mem->mem_type];
 	int ret;
@@ -199,9 +199,9 @@ int ttm_mem_reg_ioremap(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem,
 		addr = mem->bus.addr;
 	} else {
 		if (mem->placement & TTM_PL_FLAG_WC)
-			addr = ioremap_wc(mem->bus.base + mem->bus.offset, mem->bus.size);
+			addr = (void __force *)ioremap_wc(mem->bus.base + mem->bus.offset, mem->bus.size);
 		else
-			addr = ioremap_nocache(mem->bus.base + mem->bus.offset, mem->bus.size);
+			addr = (void __force *)ioremap_nocache(mem->bus.base + mem->bus.offset, mem->bus.size);
 		if (!addr) {
 			(void) ttm_mem_io_lock(man, false);
 			ttm_mem_io_free(bdev, mem);
@@ -213,15 +213,15 @@ int ttm_mem_reg_ioremap(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem,
 	return 0;
 }
 
-void ttm_mem_reg_iounmap(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem,
-			 void *virtual)
+static void ttm_mem_reg_iounmap(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem,
+				void *virtual)
 {
 	struct ttm_mem_type_manager *man;
 
 	man = &bdev->man[mem->mem_type];
 
 	if (virtual && mem->bus.addr == NULL)
-		iounmap(virtual);
+		iounmap((void __iomem *)virtual);
 	(void) ttm_mem_io_lock(man, false);
 	ttm_mem_io_free(bdev, mem);
 	ttm_mem_io_unlock(man);
@@ -229,10 +229,10 @@ void ttm_mem_reg_iounmap(struct ttm_bo_device *bdev, struct ttm_mem_reg *mem,
 
 static int ttm_copy_io_page(void *dst, void *src, unsigned long page)
 {
-	uint32_t *dstP =
-	    (uint32_t *) ((unsigned long)dst + (page << PAGE_SHIFT));
-	uint32_t *srcP =
-	    (uint32_t *) ((unsigned long)src + (page << PAGE_SHIFT));
+	uint32_t __iomem *dstP =
+	    (uint32_t __iomem *) ((unsigned long)dst + (page << PAGE_SHIFT));
+	uint32_t __iomem *srcP =
+	    (uint32_t __iomem *) ((unsigned long)src + (page << PAGE_SHIFT));
 
 	int i;
 	for (i = 0; i < PAGE_SIZE / sizeof(uint32_t); ++i)
@@ -267,7 +267,7 @@ static int ttm_copy_io_ttm_page(struct ttm_tt *ttm, void *src,
 	if (!dst)
 		return -ENOMEM;
 
-	memcpy_fromio(dst, src, PAGE_SIZE);
+	memcpy_fromio(dst, (void __iomem *)src, PAGE_SIZE);
 
 #ifdef CONFIG_X86
 #ifdef VMW_HAS_STACK_KMAP_ATOMIC
@@ -311,7 +311,7 @@ static int ttm_copy_ttm_io_page(struct ttm_tt *ttm, void *dst,
 	if (!src)
 		return -ENOMEM;
 
-	memcpy_toio(dst, src, PAGE_SIZE);
+	memcpy_toio((void __iomem *)dst, src, PAGE_SIZE);
 
 #ifdef CONFIG_X86
 #ifdef VMW_HAS_STACK_KMAP_ATOMIC
@@ -501,11 +501,13 @@ static int ttm_bo_ioremap(struct ttm_buffer_object *bo,
 	} else {
 		map->bo_kmap_type = ttm_bo_map_iomap;
 		if (mem->placement & TTM_PL_FLAG_WC)
-			map->virtual = ioremap_wc(bo->mem.bus.base + bo->mem.bus.offset + offset,
-						  size);
+			map->virtual = (void __force *)
+				ioremap_wc(bo->mem.bus.base + bo->mem.bus.offset + offset,
+					   size);
 		else
-			map->virtual = ioremap_nocache(bo->mem.bus.base + bo->mem.bus.offset + offset,
-						       size);
+			map->virtual = (void __force  *)
+				ioremap_nocache(bo->mem.bus.base + bo->mem.bus.offset + offset,
+						size);
 	}
 	return (!map->virtual) ? -ENOMEM : 0;
 }
@@ -599,7 +601,7 @@ void ttm_bo_kunmap(struct ttm_bo_kmap_obj *map)
 		return;
 	switch (map->bo_kmap_type) {
 	case ttm_bo_map_iomap:
-		iounmap(map->virtual);
+		iounmap((void __iomem *)map->virtual);
 		break;
 	case ttm_bo_map_vmap:
 		vunmap(map->virtual);

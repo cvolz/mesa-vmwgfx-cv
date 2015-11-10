@@ -399,8 +399,8 @@ int ttm_bo_mmap(struct file *filp, struct vm_area_struct *vma,
 	read_lock(&bdev->vm_lock);
 	bo = ttm_bo_vm_lookup_rb(bdev, vma->vm_pgoff,
 				 (vma->vm_end - vma->vm_start) >> PAGE_SHIFT);
-	if (likely(bo != NULL))
-		ttm_bo_reference(bo);
+	if (bo != NULL && !ttm_bo_reference_unless_doomed(bo))
+		bo = NULL;
 	read_unlock(&bdev->vm_lock);
 
 	if (unlikely(bo == NULL)) {
@@ -467,8 +467,8 @@ ssize_t ttm_bo_io(struct ttm_bo_device *bdev, struct file *filp,
 
 	read_lock(&bdev->vm_lock);
 	bo = ttm_bo_vm_lookup_rb(bdev, dev_offset, 1);
-	if (likely(bo != NULL))
-		ttm_bo_reference(bo);
+	if (bo != NULL && !ttm_bo_reference_unless_doomed(bo))
+		bo = NULL;
 	read_unlock(&bdev->vm_lock);
 
 	if (unlikely(bo == NULL))
@@ -538,69 +538,4 @@ ssize_t ttm_bo_io(struct ttm_bo_device *bdev, struct file *filp,
 out_unref:
 	ttm_bo_unref(&bo);
 	return ret;
-}
-
-ssize_t ttm_bo_fbdev_io(struct ttm_buffer_object *bo, const char __user *wbuf,
-			char __user *rbuf, size_t count, loff_t *f_pos,
-			bool write)
-{
-	struct ttm_bo_kmap_obj map;
-	unsigned long kmap_offset;
-	unsigned long kmap_end;
-	unsigned long kmap_num;
-	size_t io_size;
-	unsigned int page_offset;
-	char *virtual;
-	int ret;
-	bool no_wait = false;
-	bool dummy;
-
-	kmap_offset = (*f_pos >> PAGE_SHIFT);
-	if (unlikely(kmap_offset >= bo->num_pages))
-		return -EFBIG;
-
-	page_offset = *f_pos & ~PAGE_MASK;
-	io_size = bo->num_pages - kmap_offset;
-	io_size = (io_size << PAGE_SHIFT) - page_offset;
-	if (count < io_size)
-		io_size = count;
-
-	kmap_end = (*f_pos + count - 1) >> PAGE_SHIFT;
-	kmap_num = kmap_end - kmap_offset + 1;
-
-	ret = ttm_bo_reserve(bo, true, no_wait, false, 0);
-
-	switch (ret) {
-	case 0:
-		break;
-	case -EBUSY:
-		return -EAGAIN;
-	default:
-		return ret;
-	}
-
-	ret = ttm_bo_kmap(bo, kmap_offset, kmap_num, &map);
-	if (unlikely(ret != 0)) {
-		ttm_bo_unreserve(bo);
-		return ret;
-	}
-
-	virtual = ttm_kmap_obj_virtual(&map, &dummy);
-	virtual += page_offset;
-
-	if (write)
-		ret = copy_from_user(virtual, wbuf, io_size);
-	else
-		ret = copy_to_user(rbuf, virtual, io_size);
-
-	ttm_bo_kunmap(&map);
-	ttm_bo_unreserve(bo);
-	ttm_bo_unref(&bo);
-
-	if (unlikely(ret != 0))
-		return ret;
-
-	*f_pos += io_size;
-
-	return io_size;
 }
