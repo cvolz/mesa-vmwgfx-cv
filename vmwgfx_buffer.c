@@ -619,7 +619,7 @@ static struct ttm_backend_func vmw_ttm_func = {
 	.destroy = vmw_ttm_destroy,
 };
 
-struct ttm_backend *vmw_ttm_backend_init(struct ttm_bo_device *bdev)
+static struct ttm_backend *vmw_ttm_backend_init(struct ttm_bo_device *bdev)
 {
 	struct vmw_ttm_backend *vmw_be;
 
@@ -634,13 +634,13 @@ struct ttm_backend *vmw_ttm_backend_init(struct ttm_bo_device *bdev)
 	return &vmw_be->backend;
 }
 
-int vmw_invalidate_caches(struct ttm_bo_device *bdev, uint32_t flags)
+static int vmw_invalidate_caches(struct ttm_bo_device *bdev, uint32_t flags)
 {
 	return 0;
 }
 
-int vmw_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
-		      struct ttm_mem_type_manager *man)
+static int vmw_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
+			     struct ttm_mem_type_manager *man)
 {
 	switch (type) {
 	case TTM_PL_SYSTEM:
@@ -678,8 +678,8 @@ int vmw_init_mem_type(struct ttm_bo_device *bdev, uint32_t type,
 	return 0;
 }
 
-void vmw_evict_flags(struct ttm_buffer_object *bo,
-		     struct ttm_placement *placement)
+static void vmw_evict_flags(struct ttm_buffer_object *bo,
+			    struct ttm_placement *placement)
 {
 	*placement = vmw_sys_placement;
 }

@@ -188,8 +188,8 @@ struct vmw_marker_queue {
 
 struct vmw_fifo_state {
 	unsigned long reserved_size;
-	__le32 *dynamic_buffer;
-	__le32 *static_buffer;
+	u32 *dynamic_buffer;
+	u32 *static_buffer;
 	unsigned long static_buffer_size;
 	bool using_bounce_buffer;
 	uint32_t capabilities;
@@ -1233,4 +1233,8 @@ static inline void vmw_mmio_write(u32 value, u32 *addr)
 {
 	WRITE_ONCE(*addr, value);
 }
+
+#ifdef VMWGFX_STANDALONE
+extern int force_no_3d;
+#endif
 #endif

@@ -114,7 +114,7 @@ void vmw_resource_release_id(struct vmw_resource *res)
 	write_unlock(&dev_priv->resource_lock);
 }
 
-static void vmw_resource_release(struct kref *kref)
+static void __releases(dev_priv->resource_lock) __acquires(dev_priv->resource_lock) vmw_resource_release(struct kref *kref)
 {
 	struct vmw_resource *res =
 	    container_of(kref, struct vmw_resource, kref);
@@ -286,8 +286,8 @@ void vmw_resource_activate(struct vmw_resource *res,
 	write_unlock(&dev_priv->resource_lock);
 }
 
-struct vmw_resource *vmw_resource_lookup(struct vmw_private *dev_priv,
-					 struct idr *idr, int id)
+static struct vmw_resource *vmw_resource_lookup(struct vmw_private *dev_priv,
+						struct idr *idr, int id)
 {
 	struct vmw_resource *res;
 
@@ -397,8 +397,8 @@ int vmw_user_lookup_handle(struct vmw_private *dev_priv,
  * @size: The requested buffer size.
  * @user: Whether this is an ordinary dma buffer or a user dma buffer.
  */
-size_t vmw_dmabuf_acc_size(struct vmw_private *dev_priv, size_t size,
-			   bool user)
+static size_t vmw_dmabuf_acc_size(struct vmw_private *dev_priv, size_t size,
+				  bool user)
 {
 	static size_t struct_size, user_struct_size;
 	size_t num_pages = PAGE_ALIGN(size) >> PAGE_SHIFT;
@@ -1252,9 +1252,9 @@ void vmw_resource_unreserve(struct vmw_resource *res,
  * @val_buf:        On successful return contains data about the
  *                  reserved and validated backup buffer.
  */
-int vmw_resource_check_buffer(struct vmw_resource *res,
-			      bool interruptible,
-			      struct ttm_validate_buffer *val_buf)
+static int vmw_resource_check_buffer(struct vmw_resource *res,
+				     bool interruptible,
+				     struct ttm_validate_buffer *val_buf)
 {
 	struct list_head val_list;
 	bool backup_dirty = false;
@@ -1338,7 +1338,7 @@ int vmw_resource_reserve(struct vmw_resource *res, bool interruptible,
  *.
  * @val_buf:        Backup buffer information.
  */
-void vmw_resource_backoff_reservation(struct ttm_validate_buffer *val_buf)
+static void vmw_resource_backoff_reservation(struct ttm_validate_buffer *val_buf)
 {
 	struct list_head val_list;
 
@@ -1358,7 +1358,7 @@ void vmw_resource_backoff_reservation(struct ttm_validate_buffer *val_buf)
  * @res:            The resource to evict.
  * @interruptible:  Whether to wait interruptible.
  */
-int vmw_resource_do_evict(struct vmw_resource *res, bool interruptible)
+static int vmw_resource_do_evict(struct vmw_resource *res, bool interruptible)
 {
 	struct ttm_validate_buffer val_buf;
 	const struct vmw_res_func *func = res->func;

@@ -598,7 +598,6 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		DRM_ERROR("Failed allocating a device private struct.\n");
 		return -ENOMEM;
 	}
-	memset(dev_priv, 0, sizeof(*dev_priv));
 
 	dev_priv->dev = dev;
 	dev_priv->vmw_chipset = chipset;
@@ -1282,7 +1281,7 @@ static void vmw_master_drop(struct drm_device *dev,
  * @dev_priv: Pointer to device private struct.
  * Needs the reservation sem to be held in non-exclusive mode.
  */
-void __vmw_svga_enable(struct vmw_private *dev_priv)
+static void __vmw_svga_enable(struct vmw_private *dev_priv)
 {
 	spin_lock(&dev_priv->svga_lock);
 	if (!dev_priv->bdev.man[TTM_PL_VRAM].use_type) {
@@ -1311,7 +1310,7 @@ void vmw_svga_enable(struct vmw_private *dev_priv)
  * Needs the reservation sem to be held in exclusive mode.
  * Will not empty VRAM. VRAM must be emptied by caller.
  */
-void __vmw_svga_disable(struct vmw_private *dev_priv)
+static void __vmw_svga_disable(struct vmw_private *dev_priv)
 {
 	spin_lock(&dev_priv->svga_lock);
 	if (dev_priv->bdev.man[TTM_PL_VRAM].use_type) {

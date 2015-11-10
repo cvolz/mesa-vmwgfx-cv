@@ -458,7 +458,7 @@ static void vmw_fifo_slow_copy(struct vmw_fifo_state *fifo_state,
 	}
 }
 
-void vmw_local_fifo_commit(struct vmw_private *dev_priv, uint32_t bytes)
+static void vmw_local_fifo_commit(struct vmw_private *dev_priv, uint32_t bytes)
 {
 	struct vmw_fifo_state *fifo_state = &dev_priv->fifo;
 	u32 *fifo_mem = dev_priv->mmio_virt;

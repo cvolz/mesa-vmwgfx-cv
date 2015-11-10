@@ -209,12 +209,11 @@ static int vmw_gmr_build_descriptors(struct device *dev,
 				    desc_per_page - 1)
 					break;
 
-				(++desc_virtual)->ppn = cpu_to_le32(pfn);
-				desc_virtual->num_pages = cpu_to_le32(1);
+				(++desc_virtual)->ppn = pfn;
+				desc_virtual->num_pages = 1;
 			} else {
-				uint32_t tmp =
-				    le32_to_cpu(desc_virtual->num_pages);
-				desc_virtual->num_pages = cpu_to_le32(tmp + 1);
+				uint32_t tmp = desc_virtual->num_pages;
+				desc_virtual->num_pages = tmp + 1;
 			}
 			prev_pfn = pfn;
 			--num_pages;
@@ -222,7 +221,7 @@ static int vmw_gmr_build_descriptors(struct device *dev,
 		}
 
 		(++desc_virtual)->ppn = DMA_PAGE_INVALID;
-		desc_virtual->num_pages = cpu_to_le32(0);
+		desc_virtual->num_pages = 0;
 #ifdef VMW_HAS_STACK_KMAP_ATOMIC
 		kunmap_atomic(page_virtual);
 #else

@@ -363,7 +363,7 @@ static struct vmw_fb_deferred_io vmw_defio = {
 	.deferred_io	= vmw_deferred_io,
 };
 #else
-struct fb_deferred_io vmw_defio = {
+static struct fb_deferred_io vmw_defio = {
 	.delay		= VMW_DIRTY_DELAY,
 	.deferred_io	= vmw_deferred_io,
 };
@@ -738,7 +738,7 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	info->fix.mmio_len = 0;
 
 	info->pseudo_palette = par->pseudo_palette;
-	info->screen_base = par->vmalloc;
+	info->screen_base = (void __iomem *)par->vmalloc;
 	info->screen_size = fb_size;
 
 	info->flags = FBINFO_DEFAULT;

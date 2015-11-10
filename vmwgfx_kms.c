@@ -71,12 +71,12 @@ int vmw_cursor_update_image(struct vmw_private *dev_priv,
 
 	memcpy(&cmd[1], image, image_size);
 
-	cmd->cmd = cpu_to_le32(SVGA_CMD_DEFINE_ALPHA_CURSOR);
-	cmd->cursor.id = cpu_to_le32(0);
-	cmd->cursor.width = cpu_to_le32(width);
-	cmd->cursor.height = cpu_to_le32(height);
-	cmd->cursor.hotspotX = cpu_to_le32(hotspotX);
-	cmd->cursor.hotspotY = cpu_to_le32(hotspotY);
+	cmd->cmd = SVGA_CMD_DEFINE_ALPHA_CURSOR;
+	cmd->cursor.id = 0;
+	cmd->cursor.width = width;
+	cmd->cursor.height = height;
+	cmd->cursor.hotspotX = hotspotX;
+	cmd->cursor.hotspotY = hotspotY;
 
 	vmw_fifo_commit(dev_priv, cmd_size);
 
@@ -327,12 +327,12 @@ void vmw_kms_cursor_post_execbuf(struct vmw_private *dev_priv)
  * Generic framebuffer code
  */
 
-int vmw_framebuffer_create_handle(struct drm_framebuffer *fb,
-				  struct drm_file *file_priv,
-				  unsigned int *handle)
+static int vmw_framebuffer_create_handle(struct drm_framebuffer *fb,
+					 struct drm_file *file_priv,
+					 unsigned int *handle)
 {
 	if (handle)
-		handle = 0;
+		handle = NULL;
 
 	return 0;
 }
@@ -341,7 +341,7 @@ int vmw_framebuffer_create_handle(struct drm_framebuffer *fb,
  * Surface framebuffer code
  */
 
-void vmw_framebuffer_surface_destroy(struct drm_framebuffer *framebuffer)
+static void vmw_framebuffer_surface_destroy(struct drm_framebuffer *framebuffer)
 {
 	struct vmw_framebuffer_surface *vfbs =
 		vmw_framebuffer_to_vfbs(framebuffer);
@@ -354,11 +354,11 @@ void vmw_framebuffer_surface_destroy(struct drm_framebuffer *framebuffer)
 	kfree(vfbs);
 }
 
-int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
-				  struct drm_file *file_priv,
-				  unsigned flags, unsigned color,
-				  struct drm_clip_rect *clips,
-				  unsigned num_clips)
+static int vmw_framebuffer_surface_dirty(struct drm_framebuffer *framebuffer,
+					 struct drm_file *file_priv,
+					 unsigned flags, unsigned color,
+					 struct drm_clip_rect *clips,
+					 unsigned num_clips)
 {
 	struct vmw_private *dev_priv = vmw_priv(framebuffer->dev);
 	struct vmw_framebuffer_surface *vfbs =
@@ -541,7 +541,7 @@ out_err1:
  * Dmabuf framebuffer code
  */
 
-void vmw_framebuffer_dmabuf_destroy(struct drm_framebuffer *framebuffer)
+static void vmw_framebuffer_dmabuf_destroy(struct drm_framebuffer *framebuffer)
 {
 	struct vmw_framebuffer_dmabuf *vfbd =
 		vmw_framebuffer_to_vfbd(framebuffer);
@@ -555,11 +555,11 @@ void vmw_framebuffer_dmabuf_destroy(struct drm_framebuffer *framebuffer)
 }
 
 
-int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
-				 struct drm_file *file_priv,
-				 unsigned flags, unsigned color,
-				 struct drm_clip_rect *clips,
-				 unsigned num_clips)
+static int vmw_framebuffer_dmabuf_dirty(struct drm_framebuffer *framebuffer,
+					struct drm_file *file_priv,
+					unsigned flags, unsigned color,
+					struct drm_clip_rect *clips,
+					unsigned num_clips)
 {
 	struct vmw_private *dev_priv = vmw_priv(framebuffer->dev);
 	struct vmw_framebuffer_dmabuf *vfbd =
@@ -964,14 +964,14 @@ static struct drm_mode_config_funcs vmw_kms_funcs = {
 	.fb_create = vmw_kms_fb_create,
 };
 
-int vmw_kms_generic_present(struct vmw_private *dev_priv,
-		    struct drm_file *file_priv,
-		    struct vmw_framebuffer *vfb,
-		    struct vmw_surface *surface,
-		    uint32_t sid,
-		    int32_t destX, int32_t destY,
-		    struct drm_vmw_rect *clips,
-		    uint32_t num_clips)
+static int vmw_kms_generic_present(struct vmw_private *dev_priv,
+				   struct drm_file *file_priv,
+				   struct vmw_framebuffer *vfb,
+				   struct vmw_surface *surface,
+				   uint32_t sid,
+				   int32_t destX, int32_t destY,
+				   struct drm_vmw_rect *clips,
+				   uint32_t num_clips)
 {
 	return vmw_kms_sou_do_surface_dirty(dev_priv, vfb, NULL, clips,
 					    &surface->res, destX, destY,
@@ -1261,8 +1261,8 @@ void vmw_disable_vblank(struct drm_device *dev, int crtc)
  * Small shared kms functions.
  */
 
-int vmw_du_update_layout(struct vmw_private *dev_priv, unsigned num,
-			 struct drm_vmw_rect *rects)
+static int vmw_du_update_layout(struct vmw_private *dev_priv, unsigned num,
+				struct drm_vmw_rect *rects)
 {
 	struct drm_device *dev = dev_priv->dev;
 	struct vmw_display_unit *du;

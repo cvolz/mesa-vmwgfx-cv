@@ -102,7 +102,7 @@ struct vmw_event_fence_action {
  * objects with actions attached to them.
  */
 
-static void vmw_fence_obj_destroy_locked(struct kref *kref)
+static void __releases(fman->lock) __acquires(fman->lock) vmw_fence_obj_destroy_locked(struct kref *kref)
 {
 	struct vmw_fence_obj *fence =
 		container_of(kref, struct vmw_fence_obj, kref);
@@ -271,8 +271,8 @@ void vmw_fence_obj_unreference(struct vmw_fence_obj **fence_p)
 	spin_unlock_irq(&fman->lock);
 }
 
-void vmw_fences_perform_actions(struct vmw_fence_manager *fman,
-				struct list_head *list)
+static void vmw_fences_perform_actions(struct vmw_fence_manager *fman,
+				       struct list_head *list)
 {
 	struct vmw_fence_action *action, *next_action;
 
@@ -880,8 +880,8 @@ static void vmw_event_fence_action_cleanup(struct vmw_fence_action *action)
  * Note that the action callbacks may be executed before this function
  * returns.
  */
-void vmw_fence_obj_add_action(struct vmw_fence_obj *fence,
-			      struct vmw_fence_action *action)
+static void vmw_fence_obj_add_action(struct vmw_fence_obj *fence,
+				     struct vmw_fence_action *action)
 {
 	struct vmw_fence_manager *fman = fence->fman;
 	unsigned long irq_flags;
@@ -977,11 +977,11 @@ struct vmw_event_fence_pending
 	struct drm_vmw_event_fence event;
 };
 
-int vmw_event_fence_action_create(struct drm_file *file_priv,
-				  struct vmw_fence_obj *fence,
-				  uint32_t flags,
-				  uint64_t user_data,
-				  bool interruptible)
+static int vmw_event_fence_action_create(struct drm_file *file_priv,
+					 struct vmw_fence_obj *fence,
+					 uint32_t flags,
+					 uint64_t user_data,
+					 bool interruptible)
 {
 	struct vmw_event_fence_pending *event;
 	struct drm_device *dev = fence->fman->dev_priv->dev;
