@@ -149,7 +149,7 @@ static void vmw_gmr_free_descriptors(struct device *dev, dma_addr_t desc_dma,
 #else
 		page_virtual = kmap_atomic(page, KM_USER0);
 #endif
-		desc_dma = page_virtual[desc_per_page].ppn << PAGE_SHIFT;
+		desc_dma = (u64) page_virtual[desc_per_page].ppn << PAGE_SHIFT;
 #ifdef VMW_HAS_STACK_KMAP_ATOMIC
 		kunmap_atomic(page_virtual);
 #else

@@ -203,11 +203,12 @@ static void vmw_takedown_otable_base(struct vmw_private *dev_priv,
 		SVGA3dCmdHeader header;
 		SVGA3dCmdSetOTableBase body;
 	} *cmd;
-	struct ttm_buffer_object *bo = otable->page_table->pt_bo;
+	struct ttm_buffer_object *bo;
 
 	if (otable->page_table == NULL)
 		return;
 
+	bo = otable->page_table->pt_bo;
 	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd));
 	if (unlikely(cmd == NULL)) {
 		DRM_ERROR("Failed reserving FIFO space for OTable takedown.\n");

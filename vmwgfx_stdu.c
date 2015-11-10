@@ -644,7 +644,7 @@ static int vmw_stdu_crtc_page_flip(struct drm_crtc *crtc,
 				   struct drm_pending_vblank_event *event)
 
 {
-	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
+	struct vmw_private *dev_priv;
 	struct vmw_screen_target_display_unit *stdu;
 	int ret;
 
