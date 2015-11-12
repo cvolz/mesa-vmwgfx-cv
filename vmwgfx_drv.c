@@ -1095,6 +1095,7 @@ static long vmw_generic_ioctl(struct file *filp, unsigned int cmd,
 	struct drm_file *file_priv = filp->private_data;
 	struct drm_device *dev = file_priv->minor->dev;
 	unsigned int nr = DRM_IOCTL_NR(cmd);
+	unsigned int local_nr = nr - DRM_COMMAND_BASE;
 	struct vmw_master *vmaster;
 	unsigned int flags;
 	long ret;
@@ -1102,13 +1103,10 @@ static long vmw_generic_ioctl(struct file *filp, unsigned int cmd,
 	/*
 	 * Do extra checking on driver private ioctls.
 	 */
+	if (local_nr < dev->driver->num_ioctls) {
+		const struct drm_ioctl_desc *ioctl = &vmw_ioctls[local_nr];
 
-	if ((nr >= DRM_COMMAND_BASE) && (nr < DRM_COMMAND_END)
-	    && (nr < DRM_COMMAND_BASE + dev->driver->num_ioctls)) {
-		struct drm_ioctl_desc *ioctl =
-		    &vmw_ioctls[nr - DRM_COMMAND_BASE];
-
-		if (nr == DRM_COMMAND_BASE + DRM_VMW_EXECBUF) {
+		if (local_nr == DRM_VMW_EXECBUF) {
 			ret = (long) drm_ioctl_permit(ioctl->flags, file_priv);
 			if (unlikely(ret != 0))
 				return ret;
