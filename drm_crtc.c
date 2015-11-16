@@ -1708,6 +1708,34 @@ out:
 }
 
 /**
+ * drm_mode_cursor2_ioctl - set CRTC's cursor configuration
+ * @dev: drm device for the ioctl
+ * @data: data pointer for the ioctl
+ * @file_priv: drm file for the ioctl call
+ *
+ * Set the cursor configuration based on user request. This implements the 2nd
+ * version of the cursor ioctl, which allows userspace to additionally specify
+ * the hotspot of the pointer.
+ *
+ * Called by the user via ioctl.
+ *
+ * Returns:
+ * Zero on success, negative errno on failure.
+ */
+int drm_mode_cursor2_ioctl(struct drm_device *dev,
+			   void *data, struct drm_file *file_priv)
+{
+	struct drm_mode_cursor cursor1_data;
+
+	/* FIXME: This is a temporary solution until the stand alone
+	 * vmwgfx gets all the latest atomic mode set files
+	 */
+	memcpy(&cursor1_data, data, sizeof(struct drm_mode_cursor));
+
+	return drm_mode_cursor_ioctl(dev, &cursor1_data, file_priv);
+}
+
+/**
  * drm_mode_addfb - add an FB to the graphics configuration
  * @inode: inode from the ioctl
  * @filp: file * from the ioctl

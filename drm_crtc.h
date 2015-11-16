@@ -765,6 +765,8 @@ extern int drm_mode_setcrtc(struct drm_device *dev,
 			    void *data, struct drm_file *file_priv);
 extern int drm_mode_cursor_ioctl(struct drm_device *dev,
 				void *data, struct drm_file *file_priv);
+extern int drm_mode_cursor2_ioctl(struct drm_device *dev,
+				void *data, struct drm_file *file_priv);
 extern int drm_mode_addfb(struct drm_device *dev,
 			  void *data, struct drm_file *file_priv);
 extern int drm_mode_rmfb(struct drm_device *dev,

@@ -722,6 +722,9 @@ struct drm_prime_handle {
 #define DRM_IOCTL_MODE_MAP_DUMB    DRM_IOWR(0xB3, struct drm_mode_map_dumb)
 #define DRM_IOCTL_MODE_DESTROY_DUMB    DRM_IOWR(0xB4, struct drm_mode_destroy_dumb)
 
+#define DRM_IOCTL_MODE_CURSOR2          DRM_IOWR(0xBB, struct drm_mode_cursor2)
+
+
 /**
  * Device specific ioctls should only be in their respective headers
  * The device specific ioctl range is from 0x40 to 0x99.
