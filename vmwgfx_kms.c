@@ -133,8 +133,13 @@ void vmw_cursor_update_position(struct vmw_private *dev_priv,
 	vmw_mmio_write(++count, fifo_mem + SVGA_FIFO_CURSOR_COUNT);
 }
 
-int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
-			   uint32_t handle, uint32_t width, uint32_t height)
+
+/*
+ * vmw_du_crtc_cursor_set2 - Driver cursor_set2 callback.
+ */
+int vmw_du_crtc_cursor_set2(struct drm_crtc *crtc, struct drm_file *file_priv,
+			    uint32_t handle, uint32_t width, uint32_t height,
+			    int32_t hot_x, int32_t hot_y)
 {
 	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
 	struct ttm_object_file *tfile = vmw_fpriv(file_priv)->tfile;
@@ -172,30 +177,50 @@ int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
 		vmw_dmabuf_unreference(&du->cursor_dmabuf);
 
 	/* setup new image */
+	ret = 0;
 	if (surface) {
 		/* vmw_user_surface_lookup takes one reference */
 		du->cursor_surface = surface;
 
 		du->cursor_surface->snooper.crtc = crtc;
 		du->cursor_age = du->cursor_surface->snooper.age;
-		vmw_cursor_update_image(dev_priv, surface->snooper.image,
-					64, 64, du->hotspot_x, du->hotspot_y);
+		ret = vmw_cursor_update_image(dev_priv, surface->snooper.image,
+					      64, 64, hot_x, hot_y);
 	} else if (dmabuf) {
 		/* vmw_user_surface_lookup takes one reference */
 		du->cursor_dmabuf = dmabuf;
 
 		ret = vmw_cursor_update_dmabuf(dev_priv, dmabuf, width, height,
-					       du->hotspot_x, du->hotspot_y);
+					       hot_x, hot_y);
 	} else {
 		vmw_cursor_update_position(dev_priv, false, 0, 0);
+		du->hotspot_x = hot_x;
+		du->hotspot_y = hot_y;
 		return 0;
 	}
 
-	vmw_cursor_update_position(dev_priv, true,
-				   du->cursor_x + du->hotspot_x,
-				   du->cursor_y + du->hotspot_y);
+	if (!ret) {
+		vmw_cursor_update_position(dev_priv, true,
+					   du->cursor_x + hot_x,
+					   du->cursor_y + hot_y);
+		du->hotspot_x = hot_x;
+		du->hotspot_y = hot_y;
+	}
 
-	return 0;
+	return ret;
+}
+
+/*
+ * vmw_du_crtc_cursor_set2 - Driver cursor_set callback using
+ * default values for the cursor hotspot.
+ */
+int vmw_du_crtc_cursor_set(struct drm_crtc *crtc, struct drm_file *file_priv,
+			   uint32_t handle, uint32_t width, uint32_t height)
+{
+	struct vmw_display_unit *du = vmw_crtc_to_du(crtc);
+
+	return vmw_du_crtc_cursor_set2(crtc, file_priv, handle, width, height,
+				       du->hotspot_x, du->hotspot_y);
 }
 
 int vmw_du_crtc_cursor_move(struct drm_crtc *crtc, int x, int y)
