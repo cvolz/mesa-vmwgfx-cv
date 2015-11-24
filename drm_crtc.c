@@ -1657,10 +1657,21 @@ out:
 	return ret;
 }
 
-int drm_mode_cursor_ioctl(struct drm_device *dev,
-			void *data, struct drm_file *file_priv)
+/**
+ * drm_mode_cursor_common - Common implementation for the drm_mode_cursor
+ * ioctls
+ * @dev: Pointer to the drm device structure
+ * @req: Pointer to the ioctl argument. Note that the struct drm_mode_cursor
+ * ioctl is a subset of the drm_mode_cursor2 ioctl. Therefore it's ok to cast
+ * the former to the latter as long as not all fields are accessed.
+ * @file_priv: Pointer to a struct drm_file representing the caller.
+ * @from_2: Whether the function was called from a drm_mode_cursor2 ioctl.
+ */
+static int drm_mode_cursor_common(struct drm_device *dev,
+				  struct drm_mode_cursor2 *req,
+				  struct drm_file *file_priv,
+				  bool from_2)
 {
-	struct drm_mode_cursor *req = data;
 	struct drm_mode_object *obj;
 	struct drm_crtc *crtc;
 	int ret = 0;
@@ -1689,8 +1700,15 @@ int drm_mode_cursor_ioctl(struct drm_device *dev,
 			goto out;
 		}
 		/* Turns off the cursor if handle is 0 */
-		ret = crtc->funcs->cursor_set(crtc, file_priv, req->handle,
-					      req->width, req->height);
+		if (crtc->funcs->cursor_set2 && from_2)
+			ret = crtc->funcs->cursor_set2(crtc, file_priv,
+						       req->handle,
+						       req->width, req->height,
+						       req->hot_x, req->hot_y);
+		else
+			ret = crtc->funcs->cursor_set(crtc, file_priv,
+						      req->handle,
+						      req->width, req->height);
 	}
 
 	if (req->flags & DRM_MODE_CURSOR_MOVE) {
@@ -1705,6 +1723,12 @@ int drm_mode_cursor_ioctl(struct drm_device *dev,
 out:
 	mutex_unlock(&dev->mode_config.mutex);
 	return ret;
+}
+
+int drm_mode_cursor_ioctl(struct drm_device *dev,
+			  void *data, struct drm_file *file_priv)
+{
+	return drm_mode_cursor_common(dev, data, file_priv, false);
 }
 
 /**
@@ -1725,14 +1749,10 @@ out:
 int drm_mode_cursor2_ioctl(struct drm_device *dev,
 			   void *data, struct drm_file *file_priv)
 {
-	struct drm_mode_cursor cursor1_data;
-
 	/* FIXME: This is a temporary solution until the stand alone
 	 * vmwgfx gets all the latest atomic mode set files
 	 */
-	memcpy(&cursor1_data, data, sizeof(struct drm_mode_cursor));
-
-	return drm_mode_cursor_ioctl(dev, &cursor1_data, file_priv);
+	return drm_mode_cursor_common(dev, data, file_priv, true);
 }
 
 /**
