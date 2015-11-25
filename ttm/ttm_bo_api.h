@@ -32,6 +32,7 @@
 #define _TTM_BO_API_H_
 
 #include "drm_hashtab.h"
+#include "vmwgfx_compat.h"
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/wait.h>

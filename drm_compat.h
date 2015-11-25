@@ -424,4 +424,13 @@ static inline void set_page_locked(struct page *page)
 #define smp_mb__after_atomic() smp_mb__after_atomic_inc()
 #endif
 
+/*
+ * READ_ONCE, WRITE_ONCE appeared in 3.19.
+ * This is a simplified version for scalar use only.
+ */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0))
+#define READ_ONCE(_x) (*(volatile typeof(_x) *)&(_x))
+#define WRITE_ONCE(_x, _val) READ_ONCE(_x) = _val
+#endif
+
 #endif

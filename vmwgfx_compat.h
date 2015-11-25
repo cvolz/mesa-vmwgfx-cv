@@ -482,7 +482,7 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #define set_need_resched()
 #endif
 
-/* smp_mb__[before|after]_atomic appeared in 3.16 */
+/* set_mb__[before|after]_atomic appeared in 3.16 */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0))
 #define smp_mb__before_atomic() smp_mb__before_atomic_inc()
 #define smp_mb__after_atomic() smp_mb__after_atomic_inc()
@@ -495,14 +495,4 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #define memunmap(_addr)				\
 	iounmap((void __iomem *) _addr)
 #endif
-
-/*
- * READ_ONCE, WRITE_ONCE appeared in 3.19.
- * This is a simplified version for scalar use only.
- */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0))
-#define READ_ONCE(_x) (*(volatile typeof(_x) *)&(_x))
-#define WRITE_ONCE(_x, _val) READ_ONCE(_x) = _val
-#endif
-
 #endif
