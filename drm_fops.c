@@ -60,8 +60,6 @@ static int drm_setup(struct drm_device * dev)
 	for (i = 0; i < ARRAY_SIZE(dev->counts); i++)
 		atomic_set(&dev->counts[i], 0);
 
-	dev->sigdata.lock = NULL;
-
 	dev->queue_count = 0;
 	dev->queue_reserved = 0;
 	dev->queue_slots = 0;
@@ -531,8 +529,6 @@ int drm_release(struct inode *inode, struct file *filp)
 		 */
 
 		if (master->lock.hw_lock) {
-			if (dev->sigdata.lock == master->lock.hw_lock)
-				dev->sigdata.lock = NULL;
 			master->lock.hw_lock = NULL;
 			master->lock.file_priv = NULL;
 			wake_up_interruptible_all(&master->lock.lock_queue);

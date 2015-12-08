@@ -254,7 +254,6 @@ static int drm_addmap_core(struct drm_device * dev, resource_size_t offset,
 				kfree(map);
 				return -EBUSY;
 			}
-			dev->sigdata.lock = dev->primary->master->lock.hw_lock = map->handle;	/* Pointer to lock */
 		}
 		break;
 	case _DRM_AGP: {
@@ -433,8 +432,6 @@ int drm_rmmap_locked(struct drm_device *dev, struct drm_local_map *map)
 	case _DRM_SHM:
 		vfree(map->handle);
 		if (master) {
-			if (dev->sigdata.lock == master->lock.hw_lock)
-				dev->sigdata.lock = NULL;
 			master->lock.hw_lock = NULL;   /* SHM removed */
 			master->lock.file_priv = NULL;
 			wake_up_interruptible_all(&master->lock.lock_queue);

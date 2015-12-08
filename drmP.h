@@ -1119,8 +1119,6 @@ struct drm_device {
 	void *dev_private;		/**< device private data */
 	void *mm_private;
 	struct address_space *dev_mapping;
-	struct drm_sigdata sigdata;	   /**< For block_all_signals */
-	sigset_t sigmask;
 
 	struct drm_driver *driver;
 	struct drm_local_map *agp_buffer_map;

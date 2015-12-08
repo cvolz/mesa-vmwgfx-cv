@@ -35,8 +35,6 @@
 
 #include "drmP.h"
 
-static int drm_notifier(void *priv);
-
 /**
  * Lock ioctl.
  *
@@ -110,20 +108,6 @@ int drm_lock(struct drm_device *dev, void *data, struct drm_file *file_priv)
 		  ret ? "interrupted" : "has lock");
 	if (ret) return ret;
 
-	/* don't set the block all signals on the master process for now 
-	 * really probably not the correct answer but lets us debug xkb
- 	 * xserver for now */
-	if (!file_priv->is_master) {
-		sigemptyset(&dev->sigmask);
-		sigaddset(&dev->sigmask, SIGSTOP);
-		sigaddset(&dev->sigmask, SIGTSTP);
-		sigaddset(&dev->sigmask, SIGTTIN);
-		sigaddset(&dev->sigmask, SIGTTOU);
-		dev->sigdata.context = lock->context;
-		dev->sigdata.lock = master->lock.hw_lock;
-		block_all_signals(drm_notifier, &dev->sigdata, &dev->sigmask);
-	}
-
 	if (dev->driver->dma_ready && (lock->flags & _DRM_LOCK_READY))
 		dev->driver->dma_ready(dev);
 
@@ -180,7 +164,6 @@ int drm_unlock(struct drm_device *dev, void *data, struct drm_file *file_priv)
 		}
 	}
 
-	unblock_all_signals();
 	return 0;
 }
 
@@ -298,37 +281,6 @@ int drm_lock_free(struct drm_lock_data *lock_data, unsigned int context)
 	return 0;
 }
 EXPORT_SYMBOL(drm_lock_free);
-
-/**
- * If we get here, it means that the process has called DRM_IOCTL_LOCK
- * without calling DRM_IOCTL_UNLOCK.
- *
- * If the lock is not held, then let the signal proceed as usual.  If the lock
- * is held, then set the contended flag and keep the signal blocked.
- *
- * \param priv pointer to a drm_sigdata structure.
- * \return one if the signal should be delivered normally, or zero if the
- * signal should be blocked.
- */
-static int drm_notifier(void *priv)
-{
-	struct drm_sigdata *s = (struct drm_sigdata *) priv;
-	unsigned int old, new, prev;
-
-	/* Allow signal delivery if lock isn't held */
-	if (!s->lock || !_DRM_LOCK_IS_HELD(s->lock->lock)
-	    || _DRM_LOCKING_CONTEXT(s->lock->lock) != s->context)
-		return 1;
-
-	/* Otherwise, set flag to force call to
-	   drmUnlock */
-	do {
-		old = s->lock->lock;
-		new = old | _DRM_LOCK_CONT;
-		prev = cmpxchg(&s->lock->lock, old, new);
-	} while (prev != old);
-	return 0;
-}
 
 /**
  * This function returns immediately and takes the hw lock
