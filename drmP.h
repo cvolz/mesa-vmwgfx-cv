@@ -485,6 +485,8 @@ struct drm_file {
 	wait_queue_head_t event_wait;
 	struct list_head event_list;
 	int event_space;
+
+	struct mutex event_read_lock;
 };
 
 /** Wait queue */
