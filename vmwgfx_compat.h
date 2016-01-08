@@ -495,4 +495,16 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #define memunmap(_addr)				\
 	iounmap((void __iomem *) _addr)
 #endif
+
+/* lockdep_assert_held_once appeared in 3.18 */
+#ifndef lockdep_assert_held_once
+#ifdef CONFIG_LOCKDEP
+#define lockdep_assert_held_once (l) do {				\
+		WARN_ON_ONCE(debug_locks && !lockdep_is_held(l));	\
+	} while (0)
+#else
+#define lockdep_assert_held_once(l)             do { (void)(l); } while (0)
+#endif /* !LOCKDEP */
+#endif /* !lockdep_assert_held_once */
+
 #endif
