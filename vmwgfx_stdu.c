@@ -1139,6 +1139,11 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 	drm_connector_attach_property(connector,
 				      dev->mode_config.suggested_y_property,
 				      0);
+	if (dev_priv->implicit_placement_property)
+		drm_connector_attach_property
+			(connector,
+			 dev_priv->implicit_placement_property,
+			 stdu->base.is_implicit);
 
 	return 0;
 }
@@ -1201,6 +1206,8 @@ int vmw_kms_stdu_init_display(struct vmw_private *dev_priv)
 	ret = drm_mode_create_dirty_info_property(dev);
 	if (unlikely(ret != 0))
 		goto err_vblank_cleanup;
+
+	vmw_kms_create_implicit_placement_property(dev_priv, false);
 
 	for (i = 0; i < VMWGFX_NUM_DISPLAY_UNITS; ++i) {
 		ret = vmw_stdu_init(dev_priv, i);
