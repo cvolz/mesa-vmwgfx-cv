@@ -507,4 +507,14 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #endif /* !LOCKDEP */
 #endif /* !lockdep_assert_held_once */
 
+/*
+ * pfn_t was introduced in 4.5, and also the pfn flag PFN_DEV
+ */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0))
+#define __pfn_to_pfn_t(__pfn, __dummy) (__pfn)
+#define PFN_DEV (1UL << (BITS_PER_LONG - 3))
+#else
+#include <linux/pfn_t.h>
+#endif
+
 #endif
