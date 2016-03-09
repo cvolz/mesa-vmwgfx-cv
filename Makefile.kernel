@@ -31,7 +31,8 @@ vmwgfx-objs    := ww_mutex.o dma-fence.o reservation.o \
 		vmwgfx_scrn.o vmwgfx_surface.o vmwgfx_context.o vmwgfx_compat.o\
 		vmwgfx_prime.o vmwgfx_mob.o vmwgfx_shader.o\
 		vmwgfx_cmdbuf_res.o vmwgfx_cmdbuf.o vmwgfx_stdu.o \
-		vmwgfx_cotable.o vmwgfx_so.o vmwgfx_binding.o vmwgfx_msg.o
+		vmwgfx_cotable.o vmwgfx_so.o vmwgfx_binding.o vmwgfx_msg.o \
+		vmwgfx_simple_resource.o
 
 $(obj)/vmwgfx_drv.o: $(src)/vmwgfx_version.h
 
