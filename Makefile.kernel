@@ -24,7 +24,12 @@ vmwgfx-objs    := drm_auth.o drm_bufs.o drm_context.o drm_crtc.o \
 		vmwgfx_scrn.o vmwgfx_surface.o vmwgfx_context.o vmwgfx_compat.o\
 		vmwgfx_prime.o vmwgfx_mob.o vmwgfx_shader.o\
 		vmwgfx_cmdbuf_res.o vmwgfx_cmdbuf.o vmwgfx_stdu.o \
-		vmwgfx_cotable.o vmwgfx_so.o vmwgfx_binding.o
+		vmwgfx_cotable.o vmwgfx_so.o vmwgfx_binding.o vmwgfx_msg.o
+
+$(obj)/vmwgfx_drv.o: $(src)/vmwgfx_version.h
+
+$(src)/vmwgfx_version.h:
+	@echo "#define VMWGFX_GIT_VERSION \""`git --git-dir=$(src)/.git rev-parse --short HEAD`"\"" > $(src)/vmwgfx_version.h
 
 ifeq ($(CONFIG_COMPAT),y)
 vmwgfx-objs    += drm_ioc32.o

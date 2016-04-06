@@ -69,3 +69,5 @@ tests/setversion
 tests/updatedraw
 tests/modeprint/modeprint
 tests/modetest/modetest
+vmwgfx_version.h
+

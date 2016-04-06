@@ -1,6 +1,6 @@
 /**************************************************************************
  *
- * Copyright © 2009-2015 VMware, Inc., Palo Alto, CA., USA
+ * Copyright © 2009-2016 VMware, Inc., Palo Alto, CA., USA
  * All Rights Reserved.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
@@ -34,6 +34,7 @@
 #include "ttm/ttm_object.h"
 #include "ttm/ttm_module.h"
 #include <linux/dma_remapping.h>
+#include "vmwgfx_version.h"
 
 #define VMWGFX_DRIVER_NAME "vmwgfx"
 #define VMWGFX_DRIVER_DESC "Linux drm driver for VMware graphics devices"
@@ -42,6 +43,12 @@
 
 #define VMW_MIN_INITIAL_WIDTH 800
 #define VMW_MIN_INITIAL_HEIGHT 600
+
+#ifndef VMWGFX_GIT_VERSION
+#define VMWGFX_GIT_VERSION "Unknown"
+#endif
+
+#define VMWGFX_REPO "Stand Alone"
 
 
 /**
@@ -592,6 +599,7 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	uint32_t svga_id;
 	enum vmw_res_type i;
 	bool refuse_dma = false;
+	char host_log[100] = {0};
 
 	dev_priv = kzalloc(sizeof(*dev_priv), GFP_KERNEL);
 	if (unlikely(dev_priv == NULL)) {
@@ -867,6 +875,17 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		goto out_no_fifo;
 
 	DRM_INFO("DX: %s\n", dev_priv->has_dx ? "yes." : "no.");
+
+	snprintf(host_log, sizeof(host_log), "vmwgfx: %s-%s",
+		 VMWGFX_REPO, VMWGFX_GIT_VERSION);
+	vmw_host_log(host_log);
+
+	memset(host_log, 0, sizeof(host_log));
+	snprintf(host_log, sizeof(host_log), "vmwgfx: Module Version: %d.%d.%d",
+		 VMWGFX_DRIVER_MAJOR, VMWGFX_DRIVER_MINOR,
+		 VMWGFX_DRIVER_PATCHLEVEL);
+	vmw_host_log(host_log);
+
 
 	if (dev_priv->enable_fb) {
 		vmw_fifo_resource_inc(dev_priv);
