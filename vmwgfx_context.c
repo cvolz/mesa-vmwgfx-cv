@@ -190,7 +190,7 @@ static int vmw_gb_context_init(struct vmw_private *dev_priv,
 
 	if (dev_priv->has_mob) {
 		uctx->man = vmw_cmdbuf_res_man_create(dev_priv);
-		if (unlikely(IS_ERR(uctx->man))) {
+		if (IS_ERR(uctx->man)) {
 			ret = PTR_ERR(uctx->man);
 			uctx->man = NULL;
 			goto out_err;
@@ -423,8 +423,7 @@ static int vmw_gb_context_unbind(struct vmw_resource *res,
 	(void) vmw_execbuf_fence_commands(NULL, dev_priv,
 					  &fence, NULL);
 
-	vmw_fence_single_bo(bo, fence,
-			    val_buf->new_sync_obj_arg);
+	vmw_fence_single_bo(bo, fence);
 
 	if (likely(fence != NULL))
 		vmw_fence_obj_unreference(&fence);
@@ -648,8 +647,7 @@ static int vmw_dx_context_unbind(struct vmw_resource *res,
 	(void) vmw_execbuf_fence_commands(NULL, dev_priv,
 					  &fence, NULL);
 
-	vmw_fence_single_bo(bo, fence,
-			    val_buf->new_sync_obj_arg);
+	vmw_fence_single_bo(bo, fence);
 
 	if (likely(fence != NULL))
 		vmw_fence_obj_unreference(&fence);

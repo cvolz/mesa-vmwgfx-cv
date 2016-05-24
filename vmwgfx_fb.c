@@ -26,6 +26,8 @@
  *
  **************************************************************************/
 
+#include <linux/export.h>
+
 #include "drmP.h"
 #include "vmwgfx_drv.h"
 #include "vmwgfx_kms.h"
@@ -161,7 +163,6 @@ static int vmw_fb_check_var(struct fb_var_screeninfo *var,
 	return 0;
 }
 
-
 static int vmw_fb_blank(int blank, struct fb_info *info)
 {
 	return 0;
@@ -226,14 +227,14 @@ static void vmw_fb_dirty_flush(struct work_struct *work)
 
 	if (w && h) {
 		dst_ptr = (u8 *)par->bo_ptr  +
-			(dst_y1 * par->set_fb->pitch + dst_x1 * cpp);
+			(dst_y1 * par->set_fb->pitches[0] + dst_x1 * cpp);
 		src_ptr = (u8 *)par->vmalloc +
 			((dst_y1 + par->fb_y) * info->fix.line_length +
 			 (dst_x1 + par->fb_x) * cpp);
 
 		while (h-- > 0) {
 			memcpy(dst_ptr, src_ptr, w*cpp);
-			dst_ptr += par->set_fb->pitch;
+			dst_ptr += par->set_fb->pitches[0];
 			src_ptr += info->fix.line_length;
 		}
 
@@ -242,10 +243,8 @@ static void vmw_fb_dirty_flush(struct work_struct *work)
 		clip.y1 = dst_y1;
 		clip.y2 = dst_y2;
 
-		mutex_lock(&vmw_priv->dev->mode_config.mutex);
 		WARN_ON_ONCE(par->set_fb->funcs->dirty(cur_fb, NULL, 0, 0,
 						       &clip, 1));
-		mutex_unlock(&vmw_priv->dev->mode_config.mutex);
 		vmw_fifo_flush(vmw_priv, false);
 	}
 out_unlock:
@@ -405,6 +404,7 @@ static int vmw_fb_create_bo(struct vmw_private *vmw_priv,
 	int ret;
 
 	(void) ttm_write_lock(&vmw_priv->reservation_sem, false);
+
 	vmw_bo = kmalloc(sizeof(*vmw_bo), GFP_KERNEL);
 	if (!vmw_bo) {
 		ret = -ENOMEM;
@@ -461,7 +461,7 @@ static int vmw_fb_kms_detach(struct vmw_fb_par *par,
 		set.fb = NULL;
 		set.num_connectors = 1;
 		set.connectors = &par->con;
-		ret = par->crtc->funcs->set_config(&set);
+		ret = drm_mode_set_config_internal(&set);
 		if (ret) {
 			DRM_ERROR("Could not unset a mode.\n");
 			return ret;
@@ -471,7 +471,7 @@ static int vmw_fb_kms_detach(struct vmw_fb_par *par,
 	}
 
 	if (cur_fb) {
-		cur_fb->funcs->destroy(cur_fb);
+		drm_framebuffer_unreference(cur_fb);
 		par->set_fb = NULL;
 	}
 
@@ -513,7 +513,7 @@ static int vmw_fb_kms_framebuffer(struct fb_info *info)
 	    cur_fb->height == mode_cmd.height &&
 	    cur_fb->bits_per_pixel == mode_cmd.bpp &&
 	    cur_fb->depth == mode_cmd.depth &&
-	    cur_fb->pitch == mode_cmd.pitch)
+	    cur_fb->pitches[0] == mode_cmd.pitch)
 		return 0;
 
 	/* Need new buffer object ? */
@@ -585,7 +585,7 @@ static int vmw_fb_set_par(struct fb_info *info)
 	}
 
 	mutex_lock(&par->bo_mutex);
-	mutex_lock(&vmw_priv->dev->mode_config.mutex);
+	drm_modeset_lock_all(vmw_priv->dev);
 	ret = vmw_fb_kms_framebuffer(info);
 	if (ret)
 		goto out_unlock;
@@ -601,7 +601,7 @@ static int vmw_fb_set_par(struct fb_info *info)
 	set.num_connectors = 1;
 	set.connectors = &par->con;
 
-	ret = par->crtc->funcs->set_config(&set);
+	ret = drm_mode_set_config_internal(&set);
 	if (ret)
 		goto out_unlock;
 
@@ -643,7 +643,7 @@ out_unlock:
 		drm_mode_destroy(vmw_priv->dev, old_mode);
 	par->set_mode = mode;
 
-	mutex_unlock(&vmw_priv->dev->mode_config.mutex);
+	drm_modeset_unlock_all(vmw_priv->dev);
 	mutex_unlock(&par->bo_mutex);
 
 	return ret;
@@ -699,18 +699,18 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 	par->max_width = fb_width;
 	par->max_height = fb_height;
 
-	mutex_lock(&vmw_priv->dev->mode_config.mutex);
+	drm_modeset_lock_all(vmw_priv->dev);
 	ret = vmw_kms_fbdev_init_data(vmw_priv, 0, par->max_width,
 				      par->max_height, &par->con,
 				      &par->crtc, &init_mode);
 	if (ret) {
-		mutex_unlock(&vmw_priv->dev->mode_config.mutex);
+		drm_modeset_unlock_all(vmw_priv->dev);
 		goto err_kms;
 	}
 
-	info->var.xres = drm_mode_width(init_mode);
-	info->var.yres = drm_mode_height(init_mode);
-	mutex_unlock(&vmw_priv->dev->mode_config.mutex);
+	info->var.xres = init_mode->hdisplay;
+	info->var.yres = init_mode->vdisplay;
+	drm_modeset_unlock_all(vmw_priv->dev);
 
 	/*
 	 * Create buffers and alloc memory
@@ -759,19 +759,14 @@ int vmw_fb_init(struct vmw_private *vmw_priv)
 
 	info->var.xres_virtual = fb_width;
 	info->var.yres_virtual = fb_height;
-	info->var.bits_per_pixel = 32;
+	info->var.bits_per_pixel = fb_bpp;
 	info->var.xoffset = 0;
 	info->var.yoffset = 0;
 	info->var.activate = FB_ACTIVATE_NOW;
 	info->var.height = -1;
 	info->var.width = -1;
 
-	info->pixmap.size = 0;
-	info->pixmap.buf_align = 8;
-	info->pixmap.access_align = 32;
-	info->pixmap.flags = FB_PIXMAP_SYSTEM;
-	info->pixmap.scan_align = 1;
-
+	/* Use default scratch pixmap (info->pixmap.flags = FB_PIXMAP_SYSTEM) */
 #if (!defined(VMWGFX_STANDALONE) || defined(VMWGFX_HANDOVER))
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35))
 	info->apertures = alloc_apertures(1);
@@ -897,52 +892,6 @@ int vmw_fb_on(struct vmw_private *vmw_priv)
 	spin_lock_irqsave(&par->dirty.lock, flags);
 	par->dirty.active = true;
 	spin_unlock_irqrestore(&par->dirty.lock, flags);
-
+ 
 	return 0;
-}
-
-void vmw_fb_hotplug(struct vmw_private *vmw_priv)
-{
-	struct fb_var_screeninfo new_var;
-	struct fb_var_screeninfo tmp_var;
-	struct fb_info *info;
-	struct vmw_fb_par *par;
-	struct drm_display_mode *init_mode;
-	int ret;
-
-	info = vmw_priv->fb_info;
-	if (!info)
-		return;
-
-	par = info->par;
-
-	mutex_lock(&vmw_priv->dev->mode_config.mutex);
-	vmw_du_connector_fill_modes(par->con, par->max_width, par->max_height);
-	ret = vmw_kms_fbdev_init_data(vmw_priv, 0, par->max_width,
-				      par->max_height, &par->con,
-				      &par->crtc, &init_mode);
-	if (ret) {
-		mutex_unlock(&vmw_priv->dev->mode_config.mutex);
-		return;
-	}
-
-	new_var = info->var;
-	new_var.xres = drm_mode_width(init_mode);
-	new_var.yres = drm_mode_height(init_mode);
-	mutex_unlock(&vmw_priv->dev->mode_config.mutex);
-
-	if (vmw_fb_check_var(&new_var, info)) {
-		DRM_ERROR("fbdev hotplug failed checking new resolution.\n");
-		return;
-	}
-
-	tmp_var = info->var;
-	info->var = new_var;
-
-	if (vmw_fb_set_par(info)) {
-		DRM_ERROR("fbdev hotplut failed setting new resolution.\n");
-		info->var = tmp_var;
-	}
-
-	return;
 }

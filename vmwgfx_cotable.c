@@ -168,6 +168,7 @@ static int vmw_cotable_unscrub(struct vmw_resource *res)
 	} *cmd;
 
 	WARN_ON_ONCE(bo->mem.mem_type != VMW_PL_MOB);
+	lockdep_assert_held(&bo->resv->lock.base);
 
 	cmd = vmw_fifo_reserve_dx(dev_priv, sizeof(*cmd), SVGA3D_INVALID_ID);
 	if (!cmd) {
@@ -310,23 +311,23 @@ static int vmw_cotable_unbind(struct vmw_resource *res,
 	struct vmw_private *dev_priv = res->dev_priv;
 	struct ttm_buffer_object *bo = val_buf->bo;
 	struct vmw_fence_obj *fence;
-	int ret;
 
 	if (list_empty(&res->mob_head))
 		return 0;
 
 	WARN_ON_ONCE(bo->mem.mem_type != VMW_PL_MOB);
+	lockdep_assert_held(&bo->resv->lock.base);
 
 	mutex_lock(&dev_priv->binding_mutex);
 	if (!vcotbl->scrubbed)
 		vmw_dx_context_scrub_cotables(vcotbl->ctx, readback);
 	mutex_unlock(&dev_priv->binding_mutex);
 	(void) vmw_execbuf_fence_commands(NULL, dev_priv, &fence, NULL);
-	vmw_fence_single_bo(bo, fence, val_buf->new_sync_obj_arg);
+	vmw_fence_single_bo(bo, fence);
 	if (likely(fence != NULL))
 		vmw_fence_obj_unreference(&fence);
 
-	return ret;
+	return 0;
 }
 
 /**
@@ -365,8 +366,7 @@ static int vmw_cotable_readback(struct vmw_resource *res)
 	}
 
 	(void) vmw_execbuf_fence_commands(NULL, dev_priv, &fence, NULL);
-	vmw_fence_single_bo(&res->backup->base, fence, (void *) (unsigned long)
-			    DRM_VMW_FENCE_FLAG_EXEC);
+	vmw_fence_single_bo(&res->backup->base, fence);
 	vmw_fence_obj_unreference(&fence);
 
 	return 0;
@@ -421,11 +421,9 @@ static int vmw_cotable_resize(struct vmw_resource *res, size_t new_size)
 	}
 
 	bo = &buf->base;
-	WARN_ON_ONCE(ttm_bo_reserve(bo, false, true, false, 0));
+	WARN_ON_ONCE(ttm_bo_reserve(bo, false, true, NULL));
 
-	spin_lock(&dev_priv->bdev.fence_lock);
-	ret = ttm_bo_wait(old_bo, false, false, false);
-	spin_unlock(&dev_priv->bdev.fence_lock);
+	ret = ttm_bo_wait(old_bo, false, false);
 	if (unlikely(ret != 0)) {
 		DRM_ERROR("Failed waiting for cotable unbind.\n");
 		goto out_wait;
@@ -456,7 +454,7 @@ static int vmw_cotable_resize(struct vmw_resource *res, size_t new_size)
 	}
 
 	/* Unpin new buffer, and switch backup buffers. */
-	ret = ttm_bo_validate(bo, &vmw_mob_placement, false, false, false);
+	ret = ttm_bo_validate(bo, &vmw_mob_placement, false, false);
 	if (unlikely(ret != 0)) {
 		DRM_ERROR("Failed validating new COTable backup buffer.\n");
 		goto out_wait;

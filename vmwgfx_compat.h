@@ -44,8 +44,10 @@
 #undef EXPORT_SYMBOL
 #define EXPORT_SYMBOL(_sym)
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
 #define drm_get_pci_dev(_pdev, _ent, _driver) \
 	drm_get_dev(_pdev, _ent, _driver);
+#endif
 
 extern int ttm_init(void);
 extern void ttm_exit(void);

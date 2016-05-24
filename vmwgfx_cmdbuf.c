@@ -33,7 +33,8 @@
  * multiple of the DMA pool allocation size.
  */
 #define VMW_CMDBUF_INLINE_ALIGN 64
-#define VMW_CMDBUF_INLINE_SIZE (1024 - VMW_CMDBUF_INLINE_ALIGN)
+#define VMW_CMDBUF_INLINE_SIZE \
+	(1024 - ALIGN(sizeof(SVGACBHeader), VMW_CMDBUF_INLINE_ALIGN))
 
 /**
  * struct vmw_cmdbuf_context - Command buffer context queues
@@ -145,7 +146,7 @@ struct vmw_cmdbuf_header {
 	SVGACBHeader *cb_header;
 	SVGACBContext cb_context;
 	struct list_head list;
-	struct drm_mm_node *node;
+	struct drm_mm_node node;
 	dma_addr_t handle;
 	u8 *cmd;
 	size_t size;
@@ -169,13 +170,13 @@ struct vmw_cmdbuf_dheader {
  * struct vmw_cmdbuf_alloc_info - Command buffer space allocation metadata
  *
  * @page_size: Size of requested command buffer space in pages.
- * @node: The range manager node if allocation succeeded.
- * @ret: Error code if failure. Otherwise 0.
+ * @node: Pointer to the range manager node.
+ * @done: True if this allocation has succeeded.
  */
 struct vmw_cmdbuf_alloc_info {
 	size_t page_size;
 	struct drm_mm_node *node;
-	int ret;
+	bool done;
 };
 
 /* Loop over each context in the command buffer manager. */
@@ -253,7 +254,7 @@ static void __vmw_cmdbuf_header_free(struct vmw_cmdbuf_header *header)
 		return;
 	}
 
-	drm_mm_put_block(header->node);
+	drm_mm_remove_node(&header->node);
 	wake_up_all(&man->alloc_queue);
 	if (header->cb_header)
 		dma_pool_free(man->headers, header->cb_header,
@@ -670,45 +671,34 @@ static bool vmw_cmdbuf_try_alloc(struct vmw_cmdbuf_man *man,
 {
 	int ret;
 
-	if (info->node)
+	if (info->done)
 		return true;
-
-retry:
-	ret = drm_mm_pre_get(&man->mm);
-	if (ret) {
-		info->ret = ret;
-		return true;
-	}
+ 
+	memset(info->node, 0, sizeof(*info->node));
 	spin_lock_bh(&man->lock);
-	info->node = drm_mm_search_free(&man->mm, info->page_size, 0, 0);
-	if (!info->node) {
+	ret = drm_mm_insert_node_generic(&man->mm, info->node, info->page_size,
+					 0, 0,
+					 DRM_MM_SEARCH_DEFAULT,
+					 DRM_MM_CREATE_DEFAULT);
+	if (ret) {
 		vmw_cmdbuf_man_process(man);
-		info->node = drm_mm_search_free(&man->mm, info->page_size,
-						0, 0);
-		if (!info->node)
-			goto out_unlock;
+		ret = drm_mm_insert_node_generic(&man->mm, info->node,
+						 info->page_size, 0, 0,
+						 DRM_MM_SEARCH_DEFAULT,
+						 DRM_MM_CREATE_DEFAULT);
 	}
 
-	info->node = drm_mm_get_block_generic(info->node,
-					      info->page_size,
-					      0, 1);
-
-	/* Atomic kmalloc failed? Preload and retry.*/
-	if (!info->node) {
-		spin_unlock_bh(&man->lock);
-		goto retry;
-	}
-
-out_unlock:
 	spin_unlock_bh(&man->lock);
+	info->done = !ret;
 
-	return !!info->node;
+	return info->done;
 }
 
 /**
  * vmw_cmdbuf_alloc_space - Allocate buffer space from the main pool.
  *
  * @man: The command buffer manager.
+ * @node: Pointer to pre-allocated range-manager node.
  * @size: The size of the allocation.
  * @interruptible: Whether to sleep interruptible while waiting for space.
  *
@@ -716,15 +706,16 @@ out_unlock:
  * no space available ATM, it turns on IRQ handling and sleeps waiting for it to
  * become available.
  */
-static struct drm_mm_node *vmw_cmdbuf_alloc_space(struct vmw_cmdbuf_man *man,
-						  size_t size,
-						  bool interruptible)
+static int vmw_cmdbuf_alloc_space(struct vmw_cmdbuf_man *man,
+				  struct drm_mm_node *node,
+				  size_t size,
+				  bool interruptible)
 {
 	struct vmw_cmdbuf_alloc_info info;
 
 	info.page_size = PAGE_ALIGN(size) >> PAGE_SHIFT;
-	info.node = NULL;
-	info.ret = 0;
+	info.node = node;
+	info.done = false;
 
 	/*
 	 * To prevent starvation of large requests, only one allocating call
@@ -732,22 +723,14 @@ static struct drm_mm_node *vmw_cmdbuf_alloc_space(struct vmw_cmdbuf_man *man,
 	 */
 	if (interruptible) {
 		if (mutex_lock_interruptible(&man->space_mutex))
-			return ERR_PTR(-ERESTARTSYS);
+			return -ERESTARTSYS;
 	} else {
 		mutex_lock(&man->space_mutex);
 	}
 
 	/* Try to allocate space without waiting. */
-	(void) vmw_cmdbuf_try_alloc(man, &info);
-	if (info.ret && !info.node) {
-		mutex_unlock(&man->space_mutex);
-		return ERR_PTR(info.ret);
-	}
-
-	if (info.node) {
-		mutex_unlock(&man->space_mutex);
-		return info.node;
-	}
+	if (vmw_cmdbuf_try_alloc(man, &info))
+		goto out_unlock;
 
 	vmw_generic_waiter_add(man->dev_priv,
 			       SVGA_IRQFLAG_COMMAND_BUFFER,
@@ -763,7 +746,7 @@ static struct drm_mm_node *vmw_cmdbuf_alloc_space(struct vmw_cmdbuf_man *man,
 				(man->dev_priv, SVGA_IRQFLAG_COMMAND_BUFFER,
 				 &man->dev_priv->cmdbuf_waiters);
 			mutex_unlock(&man->space_mutex);
-			return ERR_PTR(ret);
+			return ret;
 		}
 	} else {
 		wait_event(man->alloc_queue, vmw_cmdbuf_try_alloc(man, &info));
@@ -771,11 +754,11 @@ static struct drm_mm_node *vmw_cmdbuf_alloc_space(struct vmw_cmdbuf_man *man,
 	vmw_generic_waiter_remove(man->dev_priv,
 				  SVGA_IRQFLAG_COMMAND_BUFFER,
 				  &man->dev_priv->cmdbuf_waiters);
-	mutex_unlock(&man->space_mutex);
-	if (info.ret && !info.node)
-		return ERR_PTR(info.ret);
 
-	return info.node;
+out_unlock:
+	mutex_unlock(&man->space_mutex);
+
+	return 0;
 }
 
 /**
@@ -799,10 +782,10 @@ static int vmw_cmdbuf_space_pool(struct vmw_cmdbuf_man *man,
 	if (!man->has_pool)
 		return -ENOMEM;
 
-	header->node = vmw_cmdbuf_alloc_space(man, size, interruptible);
+	ret = vmw_cmdbuf_alloc_space(man, &header->node,  size, interruptible);
 
-	if (IS_ERR(header->node))
-		return PTR_ERR(header->node);
+	if (ret)
+		return ret;
 
 #ifndef VMWGFX_STANDALONE
 	header->cb_header = dma_pool_zalloc(man->headers, GFP_KERNEL,
@@ -819,9 +802,9 @@ static int vmw_cmdbuf_space_pool(struct vmw_cmdbuf_man *man,
 		goto out_no_cb_header;
 	}
 
-	header->size = header->node->size << PAGE_SHIFT;
+	header->size = header->node.size << PAGE_SHIFT;
 	cb_hdr = header->cb_header;
-	offset = header->node->start << PAGE_SHIFT;
+	offset = header->node.start << PAGE_SHIFT;
 	header->cmd = man->map + offset;
 	if (man->using_mob) {
 		cb_hdr->flags = SVGA_CB_FLAG_MOB;
@@ -835,7 +818,7 @@ static int vmw_cmdbuf_space_pool(struct vmw_cmdbuf_man *man,
 
 out_no_cb_header:
 	spin_lock_bh(&man->lock);
-	drm_mm_put_block(header->node);
+	drm_mm_remove_node(&header->node);
 	spin_unlock_bh(&man->lock);
 
 	return ret;
@@ -1176,11 +1159,11 @@ int vmw_cmdbuf_set_pool_size(struct vmw_cmdbuf_man *man,
 		 * actually call into the already enabled manager, when
 		 * binding the MOB.
 		 */
-		if (!(dev_priv->capabilities & SVGA_CAP_CMD_BUFFERS_3))
+		if (!(dev_priv->capabilities & SVGA_CAP_DX))
 			return -ENOMEM;
 
 		ret = ttm_bo_create(&dev_priv->bdev, size, ttm_bo_type_device,
-				    &vmw_mob_ne_placement, 0, 0, false, NULL,
+				    &vmw_mob_ne_placement, 0, false, NULL,
 				    &man->cmd_space);
 		if (ret)
 			return ret;
@@ -1195,9 +1178,7 @@ int vmw_cmdbuf_set_pool_size(struct vmw_cmdbuf_man *man,
 	}
 
 	man->size = size;
-	ret = drm_mm_init(&man->mm, 0, size >> PAGE_SHIFT);
-	if (ret)
-		goto out_no_mm;
+	drm_mm_init(&man->mm, 0, size >> PAGE_SHIFT);
 
 	man->has_pool = true;
 
@@ -1213,12 +1194,6 @@ int vmw_cmdbuf_set_pool_size(struct vmw_cmdbuf_man *man,
 
 	return 0;
 
-out_no_mm:
-	if (man->using_mob)
-		(void) ttm_bo_kunmap(&man->map_obj);
-	else
-		dma_free_coherent(&man->dev_priv->dev->pdev->dev,
-				  man->size, man->map, man->handle);
 out_no_map:
 	if (man->using_mob)
 		ttm_bo_unref(&man->cmd_space);

@@ -305,8 +305,7 @@ static int vmw_gb_shader_unbind(struct vmw_resource *res,
 	(void) vmw_execbuf_fence_commands(NULL, dev_priv,
 					  &fence, NULL);
 
-	vmw_fence_single_bo(val_buf->bo, fence,
-			    val_buf->new_sync_obj_arg);
+	vmw_fence_single_bo(val_buf->bo, fence);
 
 	if (likely(fence != NULL))
 		vmw_fence_obj_unreference(&fence);
@@ -537,8 +536,7 @@ static int vmw_dx_shader_unbind(struct vmw_resource *res,
 
 	(void) vmw_execbuf_fence_commands(NULL, dev_priv,
 					  &fence, NULL);
-	vmw_fence_single_bo(val_buf->bo, fence,
-			    val_buf->new_sync_obj_arg);
+	vmw_fence_single_bo(val_buf->bo, fence);
 
 	if (likely(fence != NULL))
 		vmw_fence_obj_unreference(&fence);
@@ -990,7 +988,7 @@ int vmw_compat_shader_add(struct vmw_private *dev_priv,
 	if (unlikely(ret != 0))
 		goto out;
 
-	ret = ttm_bo_reserve(&buf->base, false, true, false, 0);
+	ret = ttm_bo_reserve(&buf->base, false, true, NULL);
 	if (unlikely(ret != 0))
 		goto no_reserve;
 
@@ -1006,8 +1004,7 @@ int vmw_compat_shader_add(struct vmw_private *dev_priv,
 	WARN_ON(is_iomem);
 
 	ttm_bo_kunmap(&map);
-	ret = ttm_bo_validate(&buf->base, &vmw_sys_placement, false, true,
-			      false);
+	ret = ttm_bo_validate(&buf->base, &vmw_sys_placement, false, true);
 	WARN_ON(ret != 0);
 	ttm_bo_unreserve(&buf->base);
 

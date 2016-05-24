@@ -466,8 +466,7 @@ static int vmw_legacy_srf_dma(struct vmw_resource *res,
 	(void) vmw_execbuf_fence_commands(NULL, dev_priv,
 					  &fence, NULL);
 
-	vmw_fence_single_bo(val_buf->bo, fence,
-			    val_buf->new_sync_obj_arg);
+	vmw_fence_single_bo(val_buf->bo, fence);
 
 	if (likely(fence != NULL))
 		vmw_fence_obj_unreference(&fence);
@@ -812,11 +811,8 @@ int vmw_surface_define_ioctl(struct drm_device *dev, void *data,
 	    srf->sizes[0].height == 64 &&
 	    srf->format == SVGA3D_A8R8G8B8) {
 
-		srf->snooper.image = kmalloc(64 * 64 * 4, GFP_KERNEL);
-		/* clear the image */
-		if (srf->snooper.image) {
-			memset(srf->snooper.image, 0x00, 64 * 64 * 4);
-		} else {
+		srf->snooper.image = kzalloc(64 * 64 * 4, GFP_KERNEL);
+		if (!srf->snooper.image) {
 			DRM_ERROR("Failed to allocate cursor_image\n");
 			ret = -ENOMEM;
 			goto out_no_copy;
@@ -1219,8 +1215,7 @@ static int vmw_gb_surface_unbind(struct vmw_resource *res,
 	(void) vmw_execbuf_fence_commands(NULL, dev_priv,
 					  &fence, NULL);
 
-	vmw_fence_single_bo(val_buf->bo, fence,
-			    val_buf->new_sync_obj_arg);
+	vmw_fence_single_bo(val_buf->bo, fence);
 
 	if (likely(fence != NULL))
 		vmw_fence_obj_unreference(&fence);
@@ -1248,6 +1243,7 @@ static int vmw_gb_surface_destroy(struct vmw_resource *res)
 	if (unlikely(!cmd)) {
 		DRM_ERROR("Failed reserving FIFO space for surface "
 			  "destruction.\n");
+		mutex_unlock(&dev_priv->binding_mutex);
 		return -ENOMEM;
 	}
 
@@ -1363,7 +1359,8 @@ int vmw_gb_surface_define_ioctl(struct drm_device *dev, void *data,
 	rep->handle      = user_srf->prime.base.hash.key;
 	rep->backup_size = res->backup_size;
 	if (res->backup) {
-		rep->buffer_map_handle = res->backup->base.addr_space_offset;
+		rep->buffer_map_handle =
+			drm_vma_node_offset_addr(&res->backup->base.vma_node);
 		rep->buffer_size = res->backup->base.num_pages * PAGE_SIZE;
 		rep->buffer_handle = backup_handle;
 	} else {
@@ -1439,7 +1436,8 @@ int vmw_gb_surface_reference_ioctl(struct drm_device *dev, void *data,
 	rep->crep.handle = user_srf->prime.base.hash.key;
 	rep->crep.backup_size = srf->res.backup_size;
 	rep->crep.buffer_handle = backup_handle;
-	rep->crep.buffer_map_handle = srf->res.backup->base.addr_space_offset;
+	rep->crep.buffer_map_handle =
+		drm_vma_node_offset_addr(&srf->res.backup->base.vma_node);
 	rep->crep.buffer_size = srf->res.backup->base.num_pages * PAGE_SIZE;
 
 out_bad_resource:

@@ -1,6 +1,6 @@
 /*
- * Copyright 2007 Red Hat, Inc
- * All rights reserved.
+ * Copyright © 2014 Intel Corporation
+ *   Daniel Vetter <daniel.vetter@ffwll.ch>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -9,32 +9,105 @@
  * and/or sell copies of the Software, and to permit persons to whom the
  * Software is furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice (including the next
- * paragraph) shall be included in all copies or substantial portions of the
- * Software.
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
- * VA LINUX SYSTEMS AND/OR ITS SUPPLIERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
  * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-/* This header file holds function prototypes and data types that are
- * internal to the drm (not exported to user space) but shared across
- * drivers and platforms */
+/* drm_irq.c */
+extern unsigned int drm_timestamp_monotonic;
 
-#ifndef __DRM_INTERNAL_H__
-#define __DRM_INTERNAL_H__
+/* drm_fops.c */
+extern struct mutex drm_global_mutex;
+void drm_lastclose(struct drm_device *dev);
 
-/**
- * Drawable information.
+/* drm_pci.c */
+int drm_pci_set_unique(struct drm_device *dev,
+		       struct drm_master *master,
+		       struct drm_unique *u);
+int drm_irq_by_busid(struct drm_device *dev, void *data,
+		     struct drm_file *file_priv);
+
+/* drm_vm.c */
+int drm_vma_info(struct seq_file *m, void *data);
+
+/* drm_prime.c */
+int drm_prime_handle_to_fd_ioctl(struct drm_device *dev, void *data,
+				 struct drm_file *file_priv);
+int drm_prime_fd_to_handle_ioctl(struct drm_device *dev, void *data,
+				 struct drm_file *file_priv);
+
+void drm_prime_init_file_private(struct drm_prime_file_private *prime_fpriv);
+void drm_prime_destroy_file_private(struct drm_prime_file_private *prime_fpriv);
+void drm_prime_remove_buf_handle_locked(struct drm_prime_file_private *prime_fpriv,
+					struct dma_buf *dma_buf);
+
+/* drm_info.c */
+int drm_name_info(struct seq_file *m, void *data);
+int drm_vm_info(struct seq_file *m, void *data);
+int drm_bufs_info(struct seq_file *m, void *data);
+int drm_clients_info(struct seq_file *m, void* data);
+int drm_gem_name_info(struct seq_file *m, void *data);
+
+/* drm_irq.c */
+int drm_control(struct drm_device *dev, void *data,
+		struct drm_file *file_priv);
+int drm_modeset_ctl(struct drm_device *dev, void *data,
+		    struct drm_file *file_priv);
+
+/* drm_auth.c */
+int drm_getmagic(struct drm_device *dev, void *data,
+		 struct drm_file *file_priv);
+int drm_authmagic(struct drm_device *dev, void *data,
+		  struct drm_file *file_priv);
+
+/* drm_sysfs.c */
+/*
+ * vmwgfx: we don't have struct *drm_class, nor do we use
+ * drm_sysfs_init() or drm_sysfs_destroy()
  */
-struct drm_drawable_info {
-	unsigned int num_rects;
-	struct drm_clip_rect *rects;
-};
+struct device *drm_sysfs_minor_alloc(struct drm_minor *minor);
+int drm_sysfs_connector_add(struct drm_connector *connector);
+void drm_sysfs_connector_remove(struct drm_connector *connector);
 
+/* drm_drv.c */
+int drm_setmaster_ioctl(struct drm_device *dev, void *data,
+			struct drm_file *file_priv);
+int drm_dropmaster_ioctl(struct drm_device *dev, void *data,
+			 struct drm_file *file_priv);
+struct drm_master *drm_master_create(struct drm_minor *minor);
+
+/* drm_debugfs.c */
+#if defined(CONFIG_DEBUG_FS)
+int drm_debugfs_init(struct drm_minor *minor, int minor_id,
+		     struct dentry *root);
+int drm_debugfs_cleanup(struct drm_minor *minor);
+int drm_debugfs_connector_add(struct drm_connector *connector);
+void drm_debugfs_connector_remove(struct drm_connector *connector);
+#else
+static inline int drm_debugfs_init(struct drm_minor *minor, int minor_id,
+				   struct dentry *root)
+{
+	return 0;
+}
+
+static inline int drm_debugfs_cleanup(struct drm_minor *minor)
+{
+	return 0;
+}
+
+static inline int drm_debugfs_connector_add(struct drm_connector *connector)
+{
+	return 0;
+}
+static inline void drm_debugfs_connector_remove(struct drm_connector *connector)
+{
+}
 #endif

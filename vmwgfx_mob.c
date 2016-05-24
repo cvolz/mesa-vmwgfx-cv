@@ -35,19 +35,11 @@
 
 #ifdef CONFIG_64BIT
 #define VMW_PPN_SIZE 8
-#define vmw_cmd_set_otable_base SVGA3dCmdSetOTableBase64
-#define VMW_ID_SET_OTABLE_BASE SVGA_3D_CMD_SET_OTABLE_BASE64
-#define vmw_cmd_define_gb_mob SVGA3dCmdDefineGBMob64
-#define VMW_ID_DEFINE_GB_MOB SVGA_3D_CMD_DEFINE_GB_MOB64
 #define VMW_MOBFMT_PTDEPTH_0 SVGA3D_MOBFMT_PTDEPTH64_0
 #define VMW_MOBFMT_PTDEPTH_1 SVGA3D_MOBFMT_PTDEPTH64_1
 #define VMW_MOBFMT_PTDEPTH_2 SVGA3D_MOBFMT_PTDEPTH64_2
 #else
 #define VMW_PPN_SIZE 4
-#define vmw_cmd_set_otable_base SVGA3dCmdSetOTableBase
-#define VMW_ID_SET_OTABLE_BASE SVGA_3D_CMD_SET_OTABLE_BASE
-#define vmw_cmd_define_gb_mob SVGA3dCmdDefineGBMob
-#define VMW_ID_DEFINE_GB_MOB SVGA_3D_CMD_DEFINE_GB_MOB
 #define VMW_MOBFMT_PTDEPTH_0 SVGA3D_MOBFMT_PTDEPTH_0
 #define VMW_MOBFMT_PTDEPTH_1 SVGA3D_MOBFMT_PTDEPTH_1
 #define VMW_MOBFMT_PTDEPTH_2 SVGA3D_MOBFMT_PTDEPTH_2
@@ -120,7 +112,7 @@ static int vmw_setup_otable_base(struct vmw_private *dev_priv,
 {
 	struct {
 		SVGA3dCmdHeader header;
-		vmw_cmd_set_otable_base body;
+		SVGA3dCmdSetOTableBase64 body;
 	} *cmd;
 	struct vmw_mob *mob;
 	const struct vmw_sg_table *vsgt;
@@ -157,11 +149,12 @@ static int vmw_setup_otable_base(struct vmw_private *dev_priv,
 	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd));
 	if (unlikely(cmd == NULL)) {
 		DRM_ERROR("Failed reserving FIFO space for OTable setup.\n");
+		ret = -ENOMEM;
 		goto out_no_fifo;
 	}
 
 	memset(cmd, 0, sizeof(*cmd));
-	cmd->header.id = VMW_ID_SET_OTABLE_BASE;
+	cmd->header.id = SVGA_3D_CMD_SET_OTABLE_BASE64;
 	cmd->header.size = sizeof(cmd->body);
 	cmd->body.type = type;
 	cmd->body.baseAddress = mob->pt_root_page >> PAGE_SHIFT;
@@ -211,7 +204,8 @@ static void vmw_takedown_otable_base(struct vmw_private *dev_priv,
 	bo = otable->page_table->pt_bo;
 	cmd = vmw_fifo_reserve(dev_priv, sizeof(*cmd));
 	if (unlikely(cmd == NULL)) {
-		DRM_ERROR("Failed reserving FIFO space for OTable takedown.\n");
+		DRM_ERROR("Failed reserving FIFO space for OTable "
+			  "takedown.\n");
 		return;
 	}
 
@@ -228,11 +222,10 @@ static void vmw_takedown_otable_base(struct vmw_private *dev_priv,
 	if (bo) {
 		int ret;
 
-		ret = ttm_bo_reserve(bo, false, true, false, false);
+		ret = ttm_bo_reserve(bo, false, true, NULL);
 		BUG_ON(ret != 0);
 
-		vmw_fence_single_bo(bo, NULL,
-				    (void *) DRM_VMW_FENCE_FLAG_EXEC);
+		vmw_fence_single_bo(bo, NULL);
 		ttm_bo_unreserve(bo);
 	}
 
@@ -263,15 +256,15 @@ static int vmw_otable_batch_setup(struct vmw_private *dev_priv,
 	ret = ttm_bo_create(&dev_priv->bdev, bo_size,
 			    ttm_bo_type_device,
 			    &vmw_sys_ne_placement,
-			    0, 0, false, NULL,
+			    0, false, NULL,
 			    &batch->otable_bo);
 
 	if (unlikely(ret != 0))
 		goto out_no_bo;
 
-	ret = ttm_bo_reserve(batch->otable_bo, false, true, false, false);
+	ret = ttm_bo_reserve(batch->otable_bo, false, true, NULL);
 	BUG_ON(ret != 0);
-	ret = ttm_tt_populate(batch->otable_bo->ttm);
+	ret = vmw_bo_driver.ttm_tt_populate(batch->otable_bo->ttm);
 	if (unlikely(ret != 0))
 		goto out_unreserve;
 	ret = vmw_bo_map_dma(batch->otable_bo);
@@ -309,7 +302,6 @@ out_no_bo:
 	return ret;
 }
 
-
 /*
  * vmw_otables_setup - Set up guest backed memory object tables
  *
@@ -321,7 +313,6 @@ out_no_bo:
  * means the object tables can be taken down using the vmw_otables_takedown
  * function.
  */
-
 int vmw_otables_setup(struct vmw_private *dev_priv)
 {
 	struct vmw_otable **otables = &dev_priv->otable_batch.otables;
@@ -355,7 +346,7 @@ out_setup:
 }
 
 static void vmw_otable_batch_takedown(struct vmw_private *dev_priv,
-				      struct vmw_otable_batch *batch)
+			       struct vmw_otable_batch *batch)
 {
 	SVGAOTableType i;
 	struct ttm_buffer_object *bo = batch->otable_bo;
@@ -366,10 +357,10 @@ static void vmw_otable_batch_takedown(struct vmw_private *dev_priv,
 			vmw_takedown_otable_base(dev_priv, i,
 						 &batch->otables[i]);
 
-	ret = ttm_bo_reserve(bo, false, true, false, false);
+	ret = ttm_bo_reserve(bo, false, true, NULL);
 	BUG_ON(ret != 0);
 
-	vmw_fence_single_bo(bo, NULL, (void *) DRM_VMW_FENCE_FLAG_EXEC);
+	vmw_fence_single_bo(bo, NULL);
 	ttm_bo_unreserve(bo);
 
 	ttm_bo_unref(&batch->otable_bo);
@@ -445,14 +436,14 @@ static int vmw_mob_pt_populate(struct vmw_private *dev_priv,
 	ret = ttm_bo_create(&dev_priv->bdev, mob->num_pages * PAGE_SIZE,
 			    ttm_bo_type_device,
 			    &vmw_sys_ne_placement,
-			    0, 0, false, NULL, &mob->pt_bo);
+			    0, false, NULL, &mob->pt_bo);
 	if (unlikely(ret != 0))
 		return ret;
 
-	ret = ttm_bo_reserve(mob->pt_bo, false, true, false, false);
+	ret = ttm_bo_reserve(mob->pt_bo, false, true, NULL);
 
 	BUG_ON(ret != 0);
-	ret = ttm_tt_populate(mob->pt_bo->ttm);
+	ret = vmw_bo_driver.ttm_tt_populate(mob->pt_bo->ttm);
 	if (unlikely(ret != 0))
 		goto out_unreserve;
 	ret = vmw_bo_map_dma(mob->pt_bo);
@@ -466,6 +457,7 @@ static int vmw_mob_pt_populate(struct vmw_private *dev_priv,
 out_unreserve:
 	ttm_bo_unreserve(mob->pt_bo);
 	ttm_bo_unref(&mob->pt_bo);
+
 	return ret;
 }
 
@@ -561,7 +553,7 @@ static void vmw_mob_pt_setup(struct vmw_mob *mob,
 	const struct vmw_sg_table *vsgt;
 	int ret;
 
-	ret = ttm_bo_reserve(bo, false, true, false, 0);
+	ret = ttm_bo_reserve(bo, false, true, NULL);
 	BUG_ON(ret != 0);
 
 	vsgt = vmw_bo_sg_table(bo);
@@ -611,7 +603,7 @@ void vmw_mob_unbind(struct vmw_private *dev_priv,
 	struct ttm_buffer_object *bo = mob->pt_bo;
 
 	if (bo) {
-		ret = ttm_bo_reserve(bo, false, true, false, 0);
+		ret = ttm_bo_reserve(bo, false, true, NULL);
 		/*
 		 * Noone else should be using this buffer.
 		 */
@@ -622,14 +614,14 @@ void vmw_mob_unbind(struct vmw_private *dev_priv,
 	if (unlikely(cmd == NULL)) {
 		DRM_ERROR("Failed reserving FIFO space for Memory "
 			  "Object unbinding.\n");
+	} else {
+		cmd->header.id = SVGA_3D_CMD_DESTROY_GB_MOB;
+		cmd->header.size = sizeof(cmd->body);
+		cmd->body.mobid = mob->id;
+		vmw_fifo_commit(dev_priv, sizeof(*cmd));
 	}
-	cmd->header.id = SVGA_3D_CMD_DESTROY_GB_MOB;
-	cmd->header.size = sizeof(cmd->body);
-	cmd->body.mobid = mob->id;
-	vmw_fifo_commit(dev_priv, sizeof(*cmd));
 	if (bo) {
-		vmw_fence_single_bo(bo, NULL,
-				    (void *)DRM_VMW_FENCE_FLAG_EXEC);
+		vmw_fence_single_bo(bo, NULL);
 		ttm_bo_unreserve(bo);
 	}
 	vmw_fifo_resource_dec(dev_priv);
@@ -661,7 +653,7 @@ int vmw_mob_bind(struct vmw_private *dev_priv,
 	struct vmw_piter data_iter;
 	struct {
 		SVGA3dCmdHeader header;
-		vmw_cmd_define_gb_mob body;
+		SVGA3dCmdDefineGBMob64 body;
 	} *cmd;
 
 	mob->id = mob_id;
@@ -694,7 +686,7 @@ int vmw_mob_bind(struct vmw_private *dev_priv,
 		goto out_no_cmd_space;
 	}
 
-	cmd->header.id = VMW_ID_DEFINE_GB_MOB;
+	cmd->header.id = SVGA_3D_CMD_DEFINE_GB_MOB64;
 	cmd->header.size = sizeof(cmd->body);
 	cmd->body.mobid = mob_id;
 	cmd->body.ptDepth = mob->pt_level;

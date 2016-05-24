@@ -579,9 +579,8 @@ static int vmw_bo_to_validate_list(struct vmw_sw_context *sw_context,
 		}
 		++sw_context->cur_val_buf;
 		val_buf = &vval_buf->base;
-		val_buf->new_sync_obj_arg = (void *) DRM_VMW_FENCE_FLAG_EXEC;
 		val_buf->bo = ttm_bo_reference(&vbo->base);
-		val_buf->reserved = false;
+		val_buf->shared = false;
 		list_add_tail(&val_buf->head, &sw_context->validate_nodes);
 		vval_buf->validate_as_mob = validate_as_mob;
 	}
@@ -1698,6 +1697,7 @@ static int vmw_cmd_wait_query(struct vmw_private *dev_priv,
 		memcpy(cmd, &gb_cmd, sizeof(*cmd));
 		return vmw_cmd_wait_gb_query(dev_priv, sw_context, header);
 	}
+
 	ret = vmw_cmd_cid_check(dev_priv, sw_context, header);
 	if (unlikely(ret != 0))
 		return ret;
@@ -3661,7 +3661,7 @@ int vmw_validate_single_buffer(struct vmw_private *dev_priv,
 
 	if (validate_as_mob)
 		return ttm_bo_validate(bo, &vmw_mob_placement, interruptible,
-				       false, false);
+				       false);
 
 	/**
 	 * Put BO in VRAM if there is space, otherwise as a GMR.
@@ -3671,7 +3671,7 @@ int vmw_validate_single_buffer(struct vmw_private *dev_priv,
 	 */
 
 	ret = ttm_bo_validate(bo, &vmw_vram_gmr_placement, interruptible,
-			      false, false);
+			      false);
 	if (likely(ret == 0 || ret == -ERESTARTSYS))
 		return ret;
 
@@ -3680,8 +3680,7 @@ int vmw_validate_single_buffer(struct vmw_private *dev_priv,
 	 * previous contents.
 	 */
 
-	ret = ttm_bo_validate(bo, &vmw_vram_placement, interruptible,
-			      false, false);
+	ret = ttm_bo_validate(bo, &vmw_vram_placement, interruptible, false);
 	return ret;
 }
 
@@ -3759,13 +3758,9 @@ int vmw_execbuf_fence_commands(struct drm_file *file_priv,
 
 	if (p_handle != NULL)
 		ret = vmw_user_fence_create(file_priv, dev_priv->fman,
-					    sequence,
-					    DRM_VMW_FENCE_FLAG_EXEC,
-					    p_fence, p_handle);
+					    sequence, p_fence, p_handle);
 	else
-		ret = vmw_fence_create(dev_priv->fman, sequence,
-				       DRM_VMW_FENCE_FLAG_EXEC,
-				       p_fence);
+		ret = vmw_fence_create(dev_priv->fman, sequence, p_fence);
 
 	if (unlikely(ret != 0 && !synced)) {
 		(void) vmw_fallback_wait(dev_priv, false, false,
@@ -3817,7 +3812,7 @@ vmw_execbuf_copy_fence_user(struct vmw_private *dev_priv,
 		BUG_ON(fence == NULL);
 
 		fence_rep.handle = fence_handle;
-		fence_rep.seqno = fence->seqno;
+		fence_rep.seqno = fence->base.seqno;
 		vmw_update_seqno(dev_priv, &dev_priv->fifo);
 		fence_rep.passed_seqno = dev_priv->last_read_seqno;
 	}
@@ -3838,8 +3833,7 @@ vmw_execbuf_copy_fence_user(struct vmw_private *dev_priv,
 		ttm_ref_object_base_unref(vmw_fp->tfile,
 					  fence_handle, TTM_REF_USAGE);
 		DRM_ERROR("Fence copy error. Syncing.\n");
-		(void) vmw_fence_obj_wait(fence, fence->signal_mask,
-					  false, false,
+		(void) vmw_fence_obj_wait(fence, false, false,
 					  VMW_FENCE_WAIT_TIMEOUT);
 	}
 }
@@ -4018,6 +4012,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	struct vmw_resource *error_resource;
 	struct list_head resource_list;
 	struct vmw_cmdbuf_header *header;
+	struct ww_acquire_ctx ticket;
 	uint32_t handle;
 	int ret;
 
@@ -4109,7 +4104,8 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 	if (unlikely(ret != 0))
 		goto out_err_nores;
 
-	ret = ttm_eu_reserve_buffers(&sw_context->validate_nodes);
+	ret = ttm_eu_reserve_buffers(&ticket, &sw_context->validate_nodes,
+				     true, NULL);
 	if (unlikely(ret != 0))
 		goto out_err_nores;
 
@@ -4160,7 +4156,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 
 	vmw_resources_unreserve(sw_context, false);
 
-	ttm_eu_fence_buffer_objects(&sw_context->validate_nodes,
+	ttm_eu_fence_buffer_objects(&ticket, &sw_context->validate_nodes,
 				    (void *) fence);
 
 	if (unlikely(dev_priv->pinned_bo != NULL &&
@@ -4194,7 +4190,7 @@ int vmw_execbuf_process(struct drm_file *file_priv,
 out_unlock_binding:
 	mutex_unlock(&dev_priv->binding_mutex);
 out_err:
-	ttm_eu_backoff_reservation(&sw_context->validate_nodes);
+	ttm_eu_backoff_reservation(&ticket, &sw_context->validate_nodes);
 out_err_nores:
 	vmw_resources_unreserve(sw_context, true);
 	vmw_resource_relocations_free(&sw_context->res_relocations);
@@ -4277,24 +4273,23 @@ void __vmw_execbuf_release_pinned_bo(struct vmw_private *dev_priv,
 	struct list_head validate_list;
 	struct ttm_validate_buffer pinned_val, query_val;
 	struct vmw_fence_obj *lfence = NULL;
+	struct ww_acquire_ctx ticket;
 
 	if (dev_priv->pinned_bo == NULL)
 		goto out_unlock;
 
 	INIT_LIST_HEAD(&validate_list);
 
-	pinned_val.new_sync_obj_arg = (void *)(unsigned long)
-		DRM_VMW_FENCE_FLAG_EXEC;
 	pinned_val.bo = ttm_bo_reference(&dev_priv->pinned_bo->base);
+	pinned_val.shared = false;
 	list_add_tail(&pinned_val.head, &validate_list);
 
-	query_val.new_sync_obj_arg = pinned_val.new_sync_obj_arg;
 	query_val.bo = ttm_bo_reference(&dev_priv->dummy_query_bo->base);
+	query_val.shared = false;
 	list_add_tail(&query_val.head, &validate_list);
 
-	do {
-		ret = ttm_eu_reserve_buffers(&validate_list);
-	} while (ret == -ERESTARTSYS);
+	ret = ttm_eu_reserve_buffers(&ticket, &validate_list,
+				     false, NULL);
 	if (unlikely(ret != 0)) {
 		vmw_execbuf_unpin_panic(dev_priv);
 		goto out_no_reserve;
@@ -4320,7 +4315,7 @@ void __vmw_execbuf_release_pinned_bo(struct vmw_private *dev_priv,
 						  NULL);
 		fence = lfence;
 	}
-	ttm_eu_fence_buffer_objects(&validate_list, (void *) fence);
+	ttm_eu_fence_buffer_objects(&ticket, &validate_list, (void *) fence);
 	if (lfence != NULL)
 		vmw_fence_obj_unreference(&lfence);
 
@@ -4331,7 +4326,7 @@ out_unlock:
 	return;
 
 out_no_emit:
-	ttm_eu_backoff_reservation(&validate_list);
+	ttm_eu_backoff_reservation(&ticket, &validate_list);
 out_no_reserve:
 	ttm_bo_unref(&query_val.bo);
 	ttm_bo_unref(&pinned_val.bo);

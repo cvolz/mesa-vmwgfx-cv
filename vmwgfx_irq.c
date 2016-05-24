@@ -30,7 +30,7 @@
 
 #define VMW_FENCE_WRAP (1 << 24)
 
-irqreturn_t vmw_irq_handler(DRM_IRQ_ARGS)
+irqreturn_t vmw_irq_handler(int irq, void *arg)
 {
 	struct drm_device *dev = (struct drm_device *)arg;
 	struct vmw_private *dev_priv = vmw_priv(dev);
@@ -177,7 +177,7 @@ int vmw_fallback_wait(struct vmw_private *dev_priv,
 	finish_wait(&dev_priv->fence_queue, &__wait);
 	if (ret == 0 && fifo_idle) {
 		u32 *fifo_mem = dev_priv->mmio_virt;
-		
+
 		vmw_mmio_write(signal_seq, fifo_mem + SVGA_FIFO_FENCE);
 	}
 	wake_up_all(&dev_priv->fence_queue);

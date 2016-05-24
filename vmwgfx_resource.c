@@ -122,21 +122,20 @@ static void __releases(dev_priv->resource_lock) __acquires(dev_priv->resource_lo
 	int id;
 	struct idr *idr = &dev_priv->res_idr[res->func->res_type];
 
+	write_lock(&dev_priv->resource_lock);
 	res->avail = false;
 	list_del_init(&res->lru_head);
 	write_unlock(&dev_priv->resource_lock);
 	if (res->backup) {
 		struct ttm_buffer_object *bo = &res->backup->base;
 
-		ttm_bo_reserve(bo, false, false, false, 0);
+		ttm_bo_reserve(bo, false, false, NULL);
 		if (!list_empty(&res->mob_head) &&
 		    res->func->unbind != NULL) {
 			struct ttm_validate_buffer val_buf;
 
 			val_buf.bo = bo;
-			val_buf.new_sync_obj_arg =
-				(void *)((unsigned long)
-					 DRM_VMW_FENCE_FLAG_EXEC);
+			val_buf.shared = false;
 			res->func->unbind(res, false, &val_buf);
 		}
 		res->backup_dirty = false;
@@ -159,20 +158,17 @@ static void __releases(dev_priv->resource_lock) __acquires(dev_priv->resource_lo
 		kfree(res);
 
 	write_lock(&dev_priv->resource_lock);
-
 	if (id != -1)
 		idr_remove(idr, id);
+	write_unlock(&dev_priv->resource_lock);
 }
 
 void vmw_resource_unreference(struct vmw_resource **p_res)
 {
 	struct vmw_resource *res = *p_res;
-	struct vmw_private *dev_priv = res->dev_priv;
 
 	*p_res = NULL;
-	write_lock(&dev_priv->resource_lock);
 	kref_put(&res->kref, vmw_resource_release);
-	write_unlock(&dev_priv->resource_lock);
 }
 
 
@@ -293,10 +289,9 @@ static struct vmw_resource *vmw_resource_lookup(struct vmw_private *dev_priv,
 
 	read_lock(&dev_priv->resource_lock);
 	res = idr_find(idr, id);
-	if (res && res->avail)
-		kref_get(&res->kref);
-	else
+	if (!res || !res->avail || !kref_get_unless_zero(&res->kref))
 		res = NULL;
+
 	read_unlock(&dev_priv->resource_lock);
 
 	if (unlikely(res == NULL))
@@ -405,8 +400,11 @@ static size_t vmw_dmabuf_acc_size(struct vmw_private *dev_priv, size_t size,
 	size_t page_array_size = ttm_round_pot(num_pages * sizeof(void *));
 
 	if (unlikely(struct_size == 0)) {
-		struct_size = ttm_round_pot(sizeof(struct vmw_dma_buffer));
-		user_struct_size =
+		size_t backend_size = ttm_round_pot(vmw_tt_size);
+
+		struct_size = backend_size +
+			ttm_round_pot(sizeof(struct vmw_dma_buffer));
+		user_struct_size = backend_size +
 			ttm_round_pot(sizeof(struct vmw_user_dma_buffer));
 	}
 
@@ -415,24 +413,20 @@ static size_t vmw_dmabuf_acc_size(struct vmw_private *dev_priv, size_t size,
 			ttm_round_pot(num_pages * sizeof(dma_addr_t));
 
 	return ((user) ? user_struct_size : struct_size) +
-		page_array_size + dev_priv->bdev.glob->ttm_bo_extra_size;
+		page_array_size;
 }
 
 void vmw_dmabuf_bo_free(struct ttm_buffer_object *bo)
 {
 	struct vmw_dma_buffer *vmw_bo = vmw_dma_buffer(bo);
-	struct ttm_bo_global *glob = bo->glob;
 
-	ttm_mem_global_free(glob->mem_glob, bo->acc_size);
 	kfree(vmw_bo);
 }
 
 static void vmw_user_dmabuf_destroy(struct ttm_buffer_object *bo)
 {
 	struct vmw_user_dma_buffer *vmw_user_bo = vmw_user_dma_buffer(bo);
-	struct ttm_bo_global *glob = bo->glob;
 
-	ttm_mem_global_free(glob->mem_glob, bo->acc_size);
 	ttm_prime_object_kfree(vmw_user_bo, prime);
 }
 
@@ -443,7 +437,6 @@ int vmw_dmabuf_init(struct vmw_private *dev_priv,
 		    void (*bo_free) (struct ttm_buffer_object *bo))
 {
 	struct ttm_bo_device *bdev = &dev_priv->bdev;
-	struct ttm_mem_global *mem_glob = bdev->glob->mem_glob;
 	size_t acc_size;
 	int ret;
 	bool user = (bo_free == &vmw_user_dmabuf_destroy);
@@ -452,23 +445,13 @@ int vmw_dmabuf_init(struct vmw_private *dev_priv,
 
 	acc_size = vmw_dmabuf_acc_size(dev_priv, size, user);
 	memset(vmw_bo, 0, sizeof(*vmw_bo));
+
 	INIT_LIST_HEAD(&vmw_bo->res_list);
-	vmw_bo->base.glob = bdev->glob;
 
-	ret = ttm_mem_global_alloc(mem_glob, acc_size, false, false);
-	if (unlikely(ret != 0)) {
-		/* we must free the bo here as
-		 * ttm_buffer_object_init does so as well */
-		bo_free(&vmw_bo->base);
-		return ret;
-	}
-
-	vmw_bo->base.acc_size = acc_size;
 	ret = ttm_bo_init(bdev, &vmw_bo->base, size,
-			  (user) ? ttm_bo_type_device :
-			  ttm_bo_type_kernel, placement,
-			  0, 0, interruptible,
-			  NULL, acc_size, bo_free);
+			  ttm_bo_type_device, placement,
+			  0, interruptible,
+			  NULL, acc_size, NULL, NULL, bo_free);
 	return ret;
 }
 
@@ -611,13 +594,18 @@ static int vmw_user_dmabuf_synccpu_grab(struct vmw_user_dma_buffer *user_bo,
 	int ret;
 
 	if (flags & drm_vmw_synccpu_allow_cs) {
-		struct ttm_bo_device *bdev = bo->bdev;
+		bool nonblock = !!(flags & drm_vmw_synccpu_dontblock);
+		long lret;
 
-		spin_lock(&bdev->fence_lock);
-		ret = ttm_bo_wait(bo, false, true,
-				  !!(flags & drm_vmw_synccpu_dontblock));
-		spin_unlock(&bdev->fence_lock);
-		return ret;
+		if (nonblock)
+			return reservation_object_test_signaled_rcu(bo->resv, true) ? 0 : -EBUSY;
+
+		lret = reservation_object_wait_timeout_rcu(bo->resv, true, true, MAX_SCHEDULE_TIMEOUT);
+		if (!lret)
+			return -EBUSY;
+		else if (lret < 0)
+			return lret;
+		return 0;
 	}
 
 	ret = ttm_bo_synccpu_write_grab
@@ -741,7 +729,7 @@ int vmw_dmabuf_alloc_ioctl(struct drm_device *dev, void *data,
 		goto out_no_dmabuf;
 
 	rep->handle = handle;
-	rep->map_handle = dma_buf->base.addr_space_offset;
+	rep->map_handle = drm_vma_node_offset_addr(&dma_buf->base.vma_node);
 	rep->cur_gmr_id = handle;
 	rep->cur_gmr_offset = 0;
 
@@ -807,13 +795,14 @@ int vmw_user_dmabuf_reference(struct ttm_object_file *tfile,
 		return -EINVAL;
 
 	user_bo = container_of(dma_buf, struct vmw_user_dma_buffer, dma);
+
 	*handle = user_bo->prime.base.hash.key;
-	return ttm_ref_object_add(tfile, &user_bo->prime.base, TTM_REF_USAGE,
-				  NULL);
+	return ttm_ref_object_add(tfile, &user_bo->prime.base,
+				  TTM_REF_USAGE, NULL);
 }
 
 /*
- * Stream managment
+ * Stream management
  */
 
 static void vmw_stream_destroy(struct vmw_resource *res)
@@ -1022,6 +1011,7 @@ err_ref:
 	return ret;
 }
 
+
 /**
  * vmw_dumb_create - Create a dumb kms buffer
  *
@@ -1082,7 +1072,7 @@ int vmw_dumb_map_offset(struct drm_file *file_priv,
 	if (ret != 0)
 		return -EINVAL;
 
-	*offset = out_buf->base.addr_space_offset;
+	*offset = drm_vma_node_offset_addr(&out_buf->base.vma_node);
 	vmw_dmabuf_unreference(&out_buf);
 	return 0;
 }
@@ -1216,14 +1206,14 @@ void vmw_resource_unreserve(struct vmw_resource *res,
 
 	if (switch_backup && new_backup != res->backup) {
 		if (res->backup) {
-			BUG_ON(atomic_read(&res->backup->base.reserved) == 0);
+			lockdep_assert_held(&res->backup->base.resv->lock.base);
 			list_del_init(&res->mob_head);
 			vmw_dmabuf_unreference(&res->backup);
 		}
 
 		if (new_backup) {
 			res->backup = vmw_dmabuf_reference(new_backup);
-			BUG_ON(atomic_read(&new_backup->base.reserved) == 0);
+			lockdep_assert_held(&new_backup->base.resv->lock.base);
 			list_add_tail(&res->mob_head, &new_backup->res_list);
 		} else {
 			res->backup = NULL;
@@ -1252,9 +1242,10 @@ void vmw_resource_unreserve(struct vmw_resource *res,
  * @val_buf:        On successful return contains data about the
  *                  reserved and validated backup buffer.
  */
-static int vmw_resource_check_buffer(struct vmw_resource *res,
-				     bool interruptible,
-				     struct ttm_validate_buffer *val_buf)
+static int
+vmw_resource_check_buffer(struct vmw_resource *res,
+			  bool interruptible,
+			  struct ttm_validate_buffer *val_buf)
 {
 	struct list_head val_list;
 	bool backup_dirty = false;
@@ -1268,10 +1259,9 @@ static int vmw_resource_check_buffer(struct vmw_resource *res,
 
 	INIT_LIST_HEAD(&val_list);
 	val_buf->bo = ttm_bo_reference(&res->backup->base);
-	val_buf->new_sync_obj_arg =  (void *)((unsigned long)
-					      DRM_VMW_FENCE_FLAG_EXEC);
+	val_buf->shared = false;
 	list_add_tail(&val_buf->head, &val_list);
-	ret = ttm_eu_reserve_buffers(&val_list);
+	ret = ttm_eu_reserve_buffers(NULL, &val_list, interruptible, NULL);
 	if (unlikely(ret != 0))
 		goto out_no_reserve;
 
@@ -1281,7 +1271,7 @@ static int vmw_resource_check_buffer(struct vmw_resource *res,
 	backup_dirty = res->backup_dirty;
 	ret = ttm_bo_validate(&res->backup->base,
 			      res->func->backup_placement,
-			      true, false, false);
+			      true, false);
 
 	if (unlikely(ret != 0))
 		goto out_no_validate;
@@ -1289,7 +1279,7 @@ static int vmw_resource_check_buffer(struct vmw_resource *res,
 	return 0;
 
 out_no_validate:
-	ttm_eu_backoff_reservation(&val_list);
+	ttm_eu_backoff_reservation(NULL, &val_list);
 out_no_reserve:
 	ttm_bo_unref(&val_buf->bo);
 	if (backup_dirty)
@@ -1338,7 +1328,8 @@ int vmw_resource_reserve(struct vmw_resource *res, bool interruptible,
  *.
  * @val_buf:        Backup buffer information.
  */
-static void vmw_resource_backoff_reservation(struct ttm_validate_buffer *val_buf)
+static void
+vmw_resource_backoff_reservation(struct ttm_validate_buffer *val_buf)
 {
 	struct list_head val_list;
 
@@ -1347,7 +1338,7 @@ static void vmw_resource_backoff_reservation(struct ttm_validate_buffer *val_buf
 
 	INIT_LIST_HEAD(&val_list);
 	list_add_tail(&val_buf->head, &val_list);
-	ttm_eu_backoff_reservation(&val_list);
+	ttm_eu_backoff_reservation(NULL, &val_list);
 	ttm_bo_unref(&val_buf->bo);
 }
 
@@ -1367,6 +1358,7 @@ static int vmw_resource_do_evict(struct vmw_resource *res, bool interruptible)
 	BUG_ON(!func->may_evict);
 
 	val_buf.bo = NULL;
+	val_buf.shared = false;
 	ret = vmw_resource_check_buffer(res, interruptible, &val_buf);
 	if (unlikely(ret != 0))
 		return ret;
@@ -1412,11 +1404,9 @@ int vmw_resource_validate(struct vmw_resource *res)
 		return 0;
 
 	val_buf.bo = NULL;
-	if (res->backup) {
+	val_buf.shared = false;
+	if (res->backup)
 		val_buf.bo = &res->backup->base;
-		val_buf.new_sync_obj_arg = (void *)(unsigned long)
-			DRM_VMW_FENCE_FLAG_EXEC;
-	}
 	do {
 		ret = vmw_resource_do_validate(res, &val_buf);
 		if (likely(ret != -EBUSY))
@@ -1473,37 +1463,25 @@ out_no_validate:
  * @bo:             Pointer to the struct ttm_buffer_object to fence.
  * @fence:          Pointer to the fence. If NULL, this function will
  *                  insert a fence into the command stream..
- * @sync_obj_arg:   Fence flags cast to a void *.
  *
  * Contrary to the ttm_eu version of this function, it takes only
  * a single buffer object instead of a list, and it also doesn't
  * unreserve the buffer object, which needs to be done separately.
  */
 void vmw_fence_single_bo(struct ttm_buffer_object *bo,
-			 struct vmw_fence_obj *fence,
-			 void *sync_obj_arg)
+			 struct vmw_fence_obj *fence)
 {
 	struct ttm_bo_device *bdev = bo->bdev;
-	struct ttm_bo_driver *driver = bdev->driver;
-	struct vmw_fence_obj *old_fence_obj;
+
 	struct vmw_private *dev_priv =
 		container_of(bdev, struct vmw_private, bdev);
 
-	if (fence == NULL)
+	if (fence == NULL) {
 		vmw_execbuf_fence_commands(NULL, dev_priv, &fence, NULL);
-	else
-		driver->sync_obj_ref(fence);
-
-	spin_lock(&bdev->fence_lock);
-
-	old_fence_obj = bo->sync_obj;
-	bo->sync_obj = fence;
-	bo->sync_obj_arg = sync_obj_arg;
-
-	spin_unlock(&bdev->fence_lock);
-
-	if (old_fence_obj)
-		vmw_fence_obj_unreference(&old_fence_obj);
+		reservation_object_add_excl_fence(bo->resv, &fence->base);
+		fence_put(&fence->base);
+	} else
+		reservation_object_add_excl_fence(bo->resv, &fence->base);
 }
 
 /**
@@ -1541,11 +1519,10 @@ void vmw_resource_move_notify(struct ttm_buffer_object *bo,
 
 	if (mem->mem_type != VMW_PL_MOB) {
 		struct vmw_resource *res, *n;
-		struct ttm_bo_device *bdev = bo->bdev;
 		struct ttm_validate_buffer val_buf;
 
 		val_buf.bo = bo;
-		val_buf.new_sync_obj_arg = bo->sync_obj_arg;
+		val_buf.shared = false;
 
 		list_for_each_entry_safe(res, n, &dma_buf->res_list, mob_head) {
 
@@ -1558,9 +1535,7 @@ void vmw_resource_move_notify(struct ttm_buffer_object *bo,
 			list_del_init(&res->mob_head);
 		}
 
-		spin_lock(&bdev->fence_lock);
-		(void) ttm_bo_wait(bo, false, false, false);
-		spin_unlock(&bdev->fence_lock);
+		(void) ttm_bo_wait(bo, false, false);
 	}
 }
 
@@ -1648,15 +1623,12 @@ void vmw_query_move_notify(struct ttm_buffer_object *bo,
 
 		/* Create a fence and attach the BO to it */
 		(void) vmw_execbuf_fence_commands(NULL, dev_priv, &fence, NULL);
-		vmw_fence_single_bo(bo, fence,
-				    (void *) DRM_VMW_FENCE_FLAG_EXEC);
+		vmw_fence_single_bo(bo, fence);
 
 		if (fence != NULL)
 			vmw_fence_obj_unreference(&fence);
 
-		spin_lock(&bdev->fence_lock);
-		(void) ttm_bo_wait(bo, false, false, false);
-		spin_unlock(&bdev->fence_lock);
+		(void) ttm_bo_wait(bo, false, false);
 	} else
 		mutex_unlock(&dev_priv->binding_mutex);
 
@@ -1767,19 +1739,20 @@ int vmw_resource_pin(struct vmw_resource *res, bool interruptible)
 
 		if (res->backup) {
 			vbo = res->backup;
-			ttm_bo_reserve(&vbo->base, interruptible, false, false,
-				       0);
+
+			ttm_bo_reserve(&vbo->base, interruptible, false, NULL);
 			if (!vbo->pin_count) {
 				ret = ttm_bo_validate
 					(&vbo->base,
 					 res->func->backup_placement,
-					 interruptible, false, false);
+					 interruptible, false);
 				if (ret) {
 					ttm_bo_unreserve(&vbo->base);
 					goto out_no_validate;
 				}
 			}
 
+			/* Do we really need to pin the MOB as well? */
 			vmw_bo_pin_reserved(vbo, true);
 		}
 		ret = vmw_resource_validate(res);
@@ -1789,7 +1762,7 @@ int vmw_resource_pin(struct vmw_resource *res, bool interruptible)
 			goto out_no_validate;
 	}
 	res->pin_count++;
-	
+
 out_no_validate:
 	vmw_resource_unreserve(res, false, NULL, 0UL);
 out_no_reserve:
@@ -1822,7 +1795,7 @@ void vmw_resource_unpin(struct vmw_resource *res)
 	if (--res->pin_count == 0 && res->backup) {
 		struct vmw_dma_buffer *vbo = res->backup;
 
-		(void) ttm_bo_reserve(&vbo->base, false, false, false, 0);
+		ttm_bo_reserve(&vbo->base, false, false, NULL);
 		vmw_bo_pin_reserved(vbo, false);
 		ttm_bo_unreserve(&vbo->base);
 	}

@@ -27,6 +27,7 @@
 
 #include "vmwgfx_kms.h"
 #include "device_include/svga3d_surfacedefs.h"
+#include "drm_plane_helper.h"
 
 #define vmw_crtc_to_stdu(x) \
 	container_of(x, struct vmw_screen_target_display_unit, base.crtc)
@@ -485,7 +486,7 @@ static int vmw_stdu_bind_fb(struct vmw_private *dev_priv,
 		new_display_srf = NULL;
 	}
 
-	crtc->fb = new_fb;
+	crtc->primary->fb = new_fb;
 	stdu->content_fb_type = new_content_type;
 	return 0;
 
@@ -552,12 +553,15 @@ static int vmw_stdu_crtc_set_config(struct drm_mode_set *set)
 	}
 
 	/* Only one active implicit frame-buffer at a time. */
+	mutex_lock(&dev_priv->global_kms_state_mutex);
 	if (!turning_off && stdu->base.is_implicit && dev_priv->implicit_fb &&
 	    !(dev_priv->num_implicit == 1 && stdu->base.active_implicit)
 	    && dev_priv->implicit_fb != vfb) {
+		mutex_unlock(&dev_priv->global_kms_state_mutex);
 		DRM_ERROR("Multiple implicit framebuffers not supported.\n");
 		return -EINVAL;
 	}
+	mutex_unlock(&dev_priv->global_kms_state_mutex);
 
 	/* Since they always map one to one these are safe */
 	connector = &stdu->base.connector;
@@ -576,7 +580,7 @@ static int vmw_stdu_crtc_set_config(struct drm_mode_set *set)
 		if (ret)
 			return ret;
 
-		crtc->fb = NULL;
+		crtc->primary->fb = NULL;
 		crtc->enabled = false;
 		encoder->crtc = NULL;
 		connector->encoder = NULL;
@@ -644,10 +648,11 @@ static int vmw_stdu_crtc_set_config(struct drm_mode_set *set)
  */
 static int vmw_stdu_crtc_page_flip(struct drm_crtc *crtc,
 				   struct drm_framebuffer *new_fb,
-				   struct drm_pending_vblank_event *event)
+				   struct drm_pending_vblank_event *event,
+				   uint32_t flags)
 
 {
-	struct vmw_private *dev_priv;
+	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
 	struct vmw_screen_target_display_unit *stdu;
 	struct drm_vmw_rect vclips;
 	struct vmw_framebuffer *vfb = vmw_framebuffer_to_vfb(new_fb);
@@ -693,6 +698,8 @@ static int vmw_stdu_crtc_page_flip(struct drm_crtc *crtc,
 						   &event->event.tv_usec,
 						   true);
 		vmw_fence_obj_unreference(&fence);
+	} else {
+		vmw_fifo_flush(dev_priv, false);
 	}
 
 	return 0;
@@ -832,7 +839,7 @@ int vmw_kms_stdu_dma(struct vmw_private *dev_priv,
 		SVGA3D_READ_HOST_VRAM;
 	ddirty.left = ddirty.top = S32_MAX;
 	ddirty.right = ddirty.bottom = S32_MIN;
-	ddirty.pitch = vfb->base.pitch;
+	ddirty.pitch = vfb->base.pitches[0];
 	ddirty.buf = buf;
 	ddirty.base.fifo_commit = vmw_stdu_dmabuf_fifo_commit;
 	ddirty.base.clip = vmw_stdu_dmabuf_clip;
@@ -1007,10 +1014,7 @@ out_finish:
 /*
  *  Screen Target CRTC dispatch table
  */
-static struct drm_crtc_funcs vmw_stdu_crtc_funcs = {
-	.save = vmw_du_crtc_save,
-	.restore = vmw_du_crtc_restore,
-	.cursor_set = vmw_du_crtc_cursor_set,
+static const struct drm_crtc_funcs vmw_stdu_crtc_funcs = {
 	.cursor_set2 = vmw_du_crtc_cursor_set2,
 	.cursor_move = vmw_du_crtc_cursor_move,
 	.gamma_set = vmw_du_crtc_gamma_set,
@@ -1040,7 +1044,7 @@ static void vmw_stdu_encoder_destroy(struct drm_encoder *encoder)
 	vmw_stdu_destroy(vmw_encoder_to_stdu(encoder));
 }
 
-static struct drm_encoder_funcs vmw_stdu_encoder_funcs = {
+static const struct drm_encoder_funcs vmw_stdu_encoder_funcs = {
 	.destroy = vmw_stdu_encoder_destroy,
 };
 
@@ -1067,10 +1071,8 @@ static void vmw_stdu_connector_destroy(struct drm_connector *connector)
 
 
 
-static struct drm_connector_funcs vmw_stdu_connector_funcs = {
+static const struct drm_connector_funcs vmw_stdu_connector_funcs = {
 	.dpms = vmw_du_connector_dpms,
-	.save = vmw_du_connector_save,
-	.restore = vmw_du_connector_restore,
 	.detect = vmw_du_connector_detect,
 	.fill_modes = vmw_du_connector_fill_modes,
 	.set_property = vmw_du_connector_set_property,
@@ -1110,7 +1112,6 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 	stdu->base.pref_active = (unit == 0);
 	stdu->base.pref_width  = dev_priv->initial_width;
 	stdu->base.pref_height = dev_priv->initial_height;
-	stdu->base.pref_mode   = NULL;
 	stdu->base.is_implicit = false;
 
 	drm_connector_init(dev, connector, &vmw_stdu_connector_funcs,
@@ -1118,35 +1119,31 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 	connector->status = vmw_du_connector_detect(connector, false);
 
 	drm_encoder_init(dev, encoder, &vmw_stdu_encoder_funcs,
-			 DRM_MODE_ENCODER_VIRTUAL);
+			 DRM_MODE_ENCODER_VIRTUAL, NULL);
 	drm_mode_connector_attach_encoder(connector, encoder);
 	encoder->possible_crtcs = (1 << unit);
 	encoder->possible_clones = 0;
 
-	(void) drm_sysfs_connector_add(connector);
+	(void) drm_connector_register(connector);
 
 	drm_crtc_init(dev, crtc, &vmw_stdu_crtc_funcs);
 
 	drm_mode_crtc_set_gamma_size(crtc, 256);
 
-	drm_connector_attach_property(connector,
-				      dev->mode_config.dirty_info_property,
-				      1);
-	drm_connector_attach_property(connector,
-				      dev_priv->hotplug_mode_update_property,
-				      1);
-	drm_connector_attach_property(connector,
-				      dev->mode_config.suggested_x_property,
-				      0);
-	drm_connector_attach_property(connector,
-				      dev->mode_config.suggested_y_property,
-				      0);
+	drm_object_attach_property(&connector->base,
+				   dev->mode_config.dirty_info_property,
+				   1);
+	drm_object_attach_property(&connector->base,
+				   dev_priv->hotplug_mode_update_property, 1);
+	drm_object_attach_property(&connector->base,
+				   dev->mode_config.suggested_x_property, 0);
+	drm_object_attach_property(&connector->base,
+				   dev->mode_config.suggested_y_property, 0);
 	if (dev_priv->implicit_placement_property)
-		drm_connector_attach_property
-			(connector,
+		drm_object_attach_property
+			(&connector->base,
 			 dev_priv->implicit_placement_property,
 			 stdu->base.is_implicit);
-
 	return 0;
 }
 
@@ -1209,6 +1206,8 @@ int vmw_kms_stdu_init_display(struct vmw_private *dev_priv)
 	if (unlikely(ret != 0))
 		goto err_vblank_cleanup;
 
+	dev_priv->active_display_unit = vmw_du_screen_target;
+
 	vmw_kms_create_implicit_placement_property(dev_priv, false);
 
 	for (i = 0; i < VMWGFX_NUM_DISPLAY_UNITS; ++i) {
@@ -1219,8 +1218,6 @@ int vmw_kms_stdu_init_display(struct vmw_private *dev_priv)
 			goto err_vblank_cleanup;
 		}
 	}
-
-	dev_priv->active_display_unit = vmw_du_screen_target;
 
 	DRM_INFO("Screen Target Display device initialized\n");
 

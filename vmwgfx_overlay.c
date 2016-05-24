@@ -578,11 +578,10 @@ int vmw_overlay_init(struct vmw_private *dev_priv)
 	if (dev_priv->overlay_priv)
 		return -EINVAL;
 
-	overlay = kmalloc(sizeof(*overlay), GFP_KERNEL);
+	overlay = kzalloc(sizeof(*overlay), GFP_KERNEL);
 	if (!overlay)
 		return -ENOMEM;
 
-	memset(overlay, 0, sizeof(*overlay));
 	mutex_init(&overlay->mutex);
 	for (i = 0; i < VMW_MAX_NUM_STREAMS; i++) {
 		overlay->stream[i].buf = NULL;

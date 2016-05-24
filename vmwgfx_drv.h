@@ -80,7 +80,6 @@
 struct vmw_fpriv {
 	struct drm_master *locked_master;
 	struct ttm_object_file *tfile;
-	struct list_head fence_events;
 	bool gb_aware;
 };
 
@@ -181,8 +180,8 @@ struct vmw_surface {
 
 struct vmw_marker_queue {
 	struct list_head head;
-	struct timespec lag;
-	struct timespec lag_time;
+	u64 lag;
+	u64 lag_time;
 	spinlock_t lock;
 };
 
@@ -240,7 +239,7 @@ enum vmw_dma_map_mode {
  * device-specific information.
  *
  * @sgt: Pointer to a struct sg_table with binding information
- * @num_regions: Number of regions with device-address contigous pages
+ * @num_regions: Number of regions with device-address contiguous pages
  */
 struct vmw_sg_table {
 	enum vmw_dma_map_mode mode;
@@ -301,7 +300,6 @@ struct vmw_sw_context{
 	uint32_t cmd_bounce_size;
 	struct list_head resource_list;
 	struct list_head ctx_resource_list; /* For contexts and cotables */
-	uint32_t fence_flags;
 	struct vmw_dma_buffer *cur_query_bo;
 	struct list_head res_relocations;
 	uint32_t *buf_start;
@@ -378,7 +376,6 @@ struct vmw_private {
 	uint32_t initial_height;
 	u32 *mmio_virt;
 	uint32_t capabilities;
-	uint32_t max_gmr_descriptors;
 	uint32_t max_gmr_ids;
 	uint32_t max_gmr_pages;
 	uint32_t max_mob_pages;
@@ -416,6 +413,7 @@ struct vmw_private {
 	struct drm_property *implicit_placement_property;
 	unsigned num_implicit;
 	struct vmw_framebuffer *implicit_fb;
+	struct mutex global_kms_state_mutex;
 
 	/*
 	 * Context and surface management.
@@ -520,14 +518,15 @@ struct vmw_private {
 	uint32_t used_memory_size;
 
 	/*
+	 * DMA mapping stuff.
+	 */
+	enum vmw_dma_map_mode map_mode;
+
+	/*
 	 * Guest Backed stuff
 	 */
 	struct vmw_otable_batch otable_batch;
 
-	/*
-	 * DMA mapping stuff.
-	 */
-	enum vmw_dma_map_mode map_mode;
 	struct vmw_cmdbuf_man *cman;
 };
 
@@ -669,21 +668,8 @@ extern void vmw_query_move_notify(struct ttm_buffer_object *bo,
 				  struct ttm_mem_reg *mem);
 extern int vmw_query_readback_all(struct vmw_dma_buffer *dx_query_mob);
 extern void vmw_fence_single_bo(struct ttm_buffer_object *bo,
-				struct vmw_fence_obj *fence,
-				void *sync_obj_arg);
+				struct vmw_fence_obj *fence);
 extern void vmw_resource_evict_all(struct vmw_private *dev_priv);
-extern int vmw_dumb_create(struct drm_file *file_priv,
-			   struct drm_device *dev,
-			   struct drm_mode_create_dumb *args);
-extern int vmw_dumb_map_offset(struct drm_file *file_priv,
-			       struct drm_device *dev, uint32_t handle,
-			       uint64_t *offset);
-extern int vmw_dumb_destroy(struct drm_file *file_priv,
-			    struct drm_device *dev,
-			    uint32_t handle);
-extern int vmw_resource_pin(struct vmw_resource *res, bool interruptible);
-extern void vmw_resource_unpin(struct vmw_resource *res);
-extern enum vmw_res_type vmw_res_type(const struct vmw_resource *res);
 
 /**
  * DMA buffer helper routines - vmwgfx_dmabuf.c
@@ -740,6 +726,7 @@ extern void vmw_fifo_commit(struct vmw_private *dev_priv, uint32_t bytes);
 extern void vmw_fifo_commit_flush(struct vmw_private *dev_priv, uint32_t bytes);
 extern int vmw_fifo_send_fence(struct vmw_private *dev_priv,
 			       uint32_t *seqno);
+extern void vmw_fifo_ping_host_locked(struct vmw_private *, uint32_t reason);
 extern void vmw_fifo_ping_host(struct vmw_private *dev_priv, uint32_t reason);
 extern bool vmw_fifo_have_3d(struct vmw_private *dev_priv);
 extern bool vmw_fifo_have_pitchlock(struct vmw_private *dev_priv);
@@ -760,6 +747,7 @@ extern int vmw_mmap(struct file *filp, struct vm_area_struct *vma);
  * TTM buffer object driver - vmwgfx_buffer.c
  */
 
+extern const size_t vmw_tt_size;
 extern struct ttm_placement vmw_vram_placement;
 extern struct ttm_placement vmw_vram_ne_placement;
 extern struct ttm_placement vmw_vram_sys_placement;
@@ -858,7 +846,7 @@ extern int vmw_validate_single_buffer(struct vmw_private *dev_priv,
  * IRQs and wating - vmwgfx_irq.c
  */
 
-extern irqreturn_t vmw_irq_handler(DRM_IRQ_ARGS);
+extern irqreturn_t vmw_irq_handler(int irq, void *arg);
 extern int vmw_wait_seqno(struct vmw_private *dev_priv, bool lazy,
 			  uint32_t seqno, bool interruptible,
 			  unsigned long timeout);
@@ -906,7 +894,6 @@ int vmw_fb_init(struct vmw_private *vmw_priv);
 int vmw_fb_close(struct vmw_private *dev_priv);
 int vmw_fb_off(struct vmw_private *vmw_priv);
 int vmw_fb_on(struct vmw_private *vmw_priv);
-void vmw_fb_hotplug(struct vmw_private *vmw_priv);
 
 /**
  * Kernel modesetting - vmwgfx_kms.c
@@ -930,9 +917,9 @@ void vmw_kms_idle_workqueues(struct vmw_master *vmaster);
 bool vmw_kms_validate_mode_vram(struct vmw_private *dev_priv,
 				uint32_t pitch,
 				uint32_t height);
-u32 vmw_get_vblank_counter(struct drm_device *dev, int crtc);
-int vmw_enable_vblank(struct drm_device *dev, int crtc);
-void vmw_disable_vblank(struct drm_device *dev, int crtc);
+u32 vmw_get_vblank_counter(struct drm_device *dev, unsigned int pipe);
+int vmw_enable_vblank(struct drm_device *dev, unsigned int pipe);
+void vmw_disable_vblank(struct drm_device *dev, unsigned int pipe);
 int vmw_kms_present(struct vmw_private *dev_priv,
 		    struct drm_file *file_priv,
 		    struct vmw_framebuffer *vfb,
@@ -942,7 +929,21 @@ int vmw_kms_present(struct vmw_private *dev_priv,
 		    uint32_t num_clips);
 int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv);
+void vmw_kms_legacy_hotspot_clear(struct vmw_private *dev_priv);
 
+int vmw_dumb_create(struct drm_file *file_priv,
+		    struct drm_device *dev,
+		    struct drm_mode_create_dumb *args);
+
+int vmw_dumb_map_offset(struct drm_file *file_priv,
+			struct drm_device *dev, uint32_t handle,
+			uint64_t *offset);
+int vmw_dumb_destroy(struct drm_file *file_priv,
+		     struct drm_device *dev,
+		     uint32_t handle);
+extern int vmw_resource_pin(struct vmw_resource *res, bool interruptible);
+extern void vmw_resource_unpin(struct vmw_resource *res);
+extern enum vmw_res_type vmw_res_type(const struct vmw_resource *res);
 
 /**
  * Overlay control - vmwgfx_overlay.c
@@ -1216,7 +1217,7 @@ static inline void vmw_fifo_resource_dec(struct vmw_private *dev_priv)
  *
  * @addr: The address to read from
  *
- * This function is intended to be equivalent to vmw_mmio_read() on
+ * This function is intended to be equivalent to ioread32() on
  * memremap'd memory, but without byteswapping.
  */
 static inline u32 vmw_mmio_read(u32 *addr)

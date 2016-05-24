@@ -26,6 +26,7 @@
  **************************************************************************/
 
 #include "vmwgfx_kms.h"
+#include "drm_plane_helper.h"
 
 
 #define vmw_crtc_to_sou(x) \
@@ -284,14 +285,17 @@ static int vmw_sou_crtc_set_config(struct drm_mode_set *set)
 	}
 
 	/* Only one active implicit frame-buffer at a time. */
+	mutex_lock(&dev_priv->global_kms_state_mutex);
 	if (sou->base.is_implicit &&
 	    dev_priv->implicit_fb && vfb &&
 	    !(dev_priv->num_implicit == 1 &&
 	      sou->base.active_implicit) &&
 	    dev_priv->implicit_fb != vfb) {
+		mutex_unlock(&dev_priv->global_kms_state_mutex);
 		DRM_ERROR("Multiple implicit framebuffers not supported.\n");
 		return -EINVAL;
 	}
+	mutex_unlock(&dev_priv->global_kms_state_mutex);
 
 	/* since they always map one to one these are safe */
 	connector = &sou->base.connector;
@@ -306,7 +310,7 @@ static int vmw_sou_crtc_set_config(struct drm_mode_set *set)
 
 		connector->encoder = NULL;
 		encoder->crtc = NULL;
-		crtc->fb = NULL;
+		crtc->primary->fb = NULL;
 		crtc->x = 0;
 		crtc->y = 0;
 		crtc->enabled = false;
@@ -367,7 +371,7 @@ static int vmw_sou_crtc_set_config(struct drm_mode_set *set)
 
 		connector->encoder = NULL;
 		encoder->crtc = NULL;
-		crtc->fb = NULL;
+		crtc->primary->fb = NULL;
 		crtc->x = 0;
 		crtc->y = 0;
 		crtc->enabled = false;
@@ -380,7 +384,7 @@ static int vmw_sou_crtc_set_config(struct drm_mode_set *set)
 	connector->encoder = encoder;
 	encoder->crtc = crtc;
 	crtc->mode = *mode;
-	crtc->fb = fb;
+	crtc->primary->fb = fb;
 	crtc->x = set->x;
 	crtc->y = set->y;
 	crtc->enabled = true;
@@ -390,10 +394,11 @@ static int vmw_sou_crtc_set_config(struct drm_mode_set *set)
 
 static int vmw_sou_crtc_page_flip(struct drm_crtc *crtc,
 				  struct drm_framebuffer *fb,
-				  struct drm_pending_vblank_event *event)
+				  struct drm_pending_vblank_event *event,
+				  uint32_t flags)
 {
 	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
-	struct drm_framebuffer *old_fb = crtc->fb;
+	struct drm_framebuffer *old_fb = crtc->primary->fb;
 	struct vmw_framebuffer *vfb = vmw_framebuffer_to_vfb(fb);
 	struct vmw_fence_obj *fence = NULL;
 	struct drm_vmw_rect vclips;
@@ -402,7 +407,7 @@ static int vmw_sou_crtc_page_flip(struct drm_crtc *crtc,
 	if (!vmw_kms_crtc_flippable(dev_priv, crtc))
 		return -EINVAL;
 
-	crtc->fb = fb;
+	crtc->primary->fb = fb;
 
 	/* do a full screen dirty update */
 	vclips.x = crtc->x;
@@ -449,15 +454,11 @@ static int vmw_sou_crtc_page_flip(struct drm_crtc *crtc,
 	return ret;
 
 out_no_fence:
-	crtc->fb = old_fb;
+	crtc->primary->fb = old_fb;
 	return ret;
 }
 
-
-static struct drm_crtc_funcs vmw_screen_object_crtc_funcs = {
-	.save = vmw_du_crtc_save,
-	.restore = vmw_du_crtc_restore,
-	.cursor_set = vmw_du_crtc_cursor_set,
+static const struct drm_crtc_funcs vmw_screen_object_crtc_funcs = {
 	.cursor_set2 = vmw_du_crtc_cursor_set2,
 	.cursor_move = vmw_du_crtc_cursor_move,
 	.gamma_set = vmw_du_crtc_gamma_set,
@@ -475,7 +476,7 @@ static void vmw_sou_encoder_destroy(struct drm_encoder *encoder)
 	vmw_sou_destroy(vmw_encoder_to_sou(encoder));
 }
 
-static struct drm_encoder_funcs vmw_screen_object_encoder_funcs = {
+static const struct drm_encoder_funcs vmw_screen_object_encoder_funcs = {
 	.destroy = vmw_sou_encoder_destroy,
 };
 
@@ -488,10 +489,8 @@ static void vmw_sou_connector_destroy(struct drm_connector *connector)
 	vmw_sou_destroy(vmw_connector_to_sou(connector));
 }
 
-static struct drm_connector_funcs vmw_sou_connector_funcs = {
+static const struct drm_connector_funcs vmw_sou_connector_funcs = {
 	.dpms = vmw_du_connector_dpms,
-	.save = vmw_du_connector_save,
-	.restore = vmw_du_connector_restore,
 	.detect = vmw_du_connector_detect,
 	.fill_modes = vmw_du_connector_fill_modes,
 	.set_property = vmw_du_connector_set_property,
@@ -524,32 +523,32 @@ static int vmw_sou_init(struct vmw_private *dev_priv, unsigned unit)
 
 	drm_connector_init(dev, connector, &vmw_sou_connector_funcs,
 			   DRM_MODE_CONNECTOR_VIRTUAL);
-	connector->status = vmw_du_connector_detect(connector, false);
+	connector->status = vmw_du_connector_detect(connector, true);
 
 	drm_encoder_init(dev, encoder, &vmw_screen_object_encoder_funcs,
-			 DRM_MODE_ENCODER_VIRTUAL);
+			 DRM_MODE_ENCODER_VIRTUAL, NULL);
 	drm_mode_connector_attach_encoder(connector, encoder);
 	encoder->possible_crtcs = (1 << unit);
 	encoder->possible_clones = 0;
 
-	(void) drm_sysfs_connector_add(connector);
+	(void) drm_connector_register(connector);
 
 	drm_crtc_init(dev, crtc, &vmw_screen_object_crtc_funcs);
 
 	drm_mode_crtc_set_gamma_size(crtc, 256);
 
-	drm_connector_attach_property(connector,
-				      dev->mode_config.dirty_info_property,
-				      1);
-	drm_connector_attach_property(connector,
-				      dev_priv->hotplug_mode_update_property, 1);
-	drm_connector_attach_property(connector,
-				      dev->mode_config.suggested_x_property, 0);
-	drm_connector_attach_property(connector,
-				      dev->mode_config.suggested_y_property, 0);
+	drm_object_attach_property(&connector->base,
+				   dev->mode_config.dirty_info_property,
+				   1);
+	drm_object_attach_property(&connector->base,
+				   dev_priv->hotplug_mode_update_property, 1);
+	drm_object_attach_property(&connector->base,
+				   dev->mode_config.suggested_x_property, 0);
+	drm_object_attach_property(&connector->base,
+				   dev->mode_config.suggested_y_property, 0);
 	if (dev_priv->implicit_placement_property)
-		drm_connector_attach_property
-			(connector,
+		drm_object_attach_property
+			(&connector->base,
 			 dev_priv->implicit_placement_property,
 			 sou->base.is_implicit);
 
@@ -604,7 +603,6 @@ int vmw_kms_sou_close_display(struct vmw_private *dev_priv)
 	return 0;
 }
 
-
 static int do_dmabuf_define_gmrfb(struct vmw_private *dev_priv,
 				  struct vmw_framebuffer *framebuffer)
 {
@@ -629,11 +627,12 @@ static int do_dmabuf_define_gmrfb(struct vmw_private *dev_priv,
 		DRM_ERROR("Out of fifo space for dirty framebuffer command.\n");
 		return -ENOMEM;
 	}
+
 	cmd->header = SVGA_CMD_DEFINE_GMRFB;
 	cmd->body.format.bitsPerPixel = framebuffer->base.bits_per_pixel;
 	cmd->body.format.colorDepth = depth;
 	cmd->body.format.reserved = 0;
-	cmd->body.bytesPerLine = framebuffer->base.pitch;
+	cmd->body.bytesPerLine = framebuffer->base.pitches[0];
 	/* Buffer is reserved in vram or GMR */
 	vmw_bo_get_guest_ptr(&buf->base, &cmd->body.ptr);
 	vmw_fifo_commit(dev_priv, sizeof(*cmd));

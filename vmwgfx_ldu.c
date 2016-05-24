@@ -26,6 +26,7 @@
  **************************************************************************/
 
 #include "vmwgfx_kms.h"
+#include "drm_plane_helper.h"
 
 
 #define vmw_crtc_to_ldu(x) \
@@ -93,17 +94,17 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 
 		if (crtc == NULL)
 			return 0;
-		fb = entry->base.crtc.fb;
+		fb = entry->base.crtc.primary->fb;
 
-		return vmw_kms_write_svga(dev_priv, w, h, fb->pitch,
+		return vmw_kms_write_svga(dev_priv, w, h, fb->pitches[0],
 					  fb->bits_per_pixel, fb->depth);
 	}
 
 	if (!list_empty(&lds->active)) {
 		entry = list_entry(lds->active.next, typeof(*entry), active);
-		fb = entry->base.crtc.fb;
+		fb = entry->base.crtc.primary->fb;
 
-		vmw_kms_write_svga(dev_priv, fb->width, fb->height, fb->pitch,
+		vmw_kms_write_svga(dev_priv, fb->width, fb->height, fb->pitches[0],
 				   fb->bits_per_pixel, fb->depth);
 	}
 
@@ -259,7 +260,7 @@ static int vmw_ldu_crtc_set_config(struct drm_mode_set *set)
 
 		connector->encoder = NULL;
 		encoder->crtc = NULL;
-		crtc->fb = NULL;
+		crtc->primary->fb = NULL;
 		crtc->enabled = false;
 
 		vmw_ldu_del_active(dev_priv, ldu);
@@ -280,7 +281,7 @@ static int vmw_ldu_crtc_set_config(struct drm_mode_set *set)
 
 	vmw_svga_enable(dev_priv);
 
-	crtc->fb = fb;
+	crtc->primary->fb = fb;
 	encoder->crtc = crtc;
 	connector->encoder = encoder;
 	crtc->x = set->x;
@@ -295,10 +296,7 @@ static int vmw_ldu_crtc_set_config(struct drm_mode_set *set)
 	return vmw_ldu_commit_list(dev_priv);
 }
 
-static struct drm_crtc_funcs vmw_legacy_crtc_funcs = {
-	.save = vmw_du_crtc_save,
-	.restore = vmw_du_crtc_restore,
-	.cursor_set = vmw_du_crtc_cursor_set,
+static const struct drm_crtc_funcs vmw_legacy_crtc_funcs = {
 	.cursor_set2 = vmw_du_crtc_cursor_set2,
 	.cursor_move = vmw_du_crtc_cursor_move,
 	.gamma_set = vmw_du_crtc_gamma_set,
@@ -316,10 +314,9 @@ static void vmw_ldu_encoder_destroy(struct drm_encoder *encoder)
 	vmw_ldu_destroy(vmw_encoder_to_ldu(encoder));
 }
 
-static struct drm_encoder_funcs vmw_legacy_encoder_funcs = {
+static const struct drm_encoder_funcs vmw_legacy_encoder_funcs = {
 	.destroy = vmw_ldu_encoder_destroy,
 };
-
 
 /*
  * Legacy Display Unit connector functions
@@ -330,10 +327,8 @@ static void vmw_ldu_connector_destroy(struct drm_connector *connector)
 	vmw_ldu_destroy(vmw_connector_to_ldu(connector));
 }
 
-static struct drm_connector_funcs vmw_legacy_connector_funcs = {
+static const struct drm_connector_funcs vmw_legacy_connector_funcs = {
 	.dpms = vmw_du_connector_dpms,
-	.save = vmw_du_connector_save,
-	.restore = vmw_du_connector_restore,
 	.detect = vmw_du_connector_detect,
 	.fill_modes = vmw_du_connector_fill_modes,
 	.set_property = vmw_du_connector_set_property,
@@ -367,32 +362,32 @@ static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 
 	drm_connector_init(dev, connector, &vmw_legacy_connector_funcs,
 			   DRM_MODE_CONNECTOR_VIRTUAL);
-	connector->status = vmw_du_connector_detect(connector, false);
+	connector->status = vmw_du_connector_detect(connector, true);
 
 	drm_encoder_init(dev, encoder, &vmw_legacy_encoder_funcs,
-			 DRM_MODE_ENCODER_VIRTUAL);
+			 DRM_MODE_ENCODER_VIRTUAL, NULL);
 	drm_mode_connector_attach_encoder(connector, encoder);
 	encoder->possible_crtcs = (1 << unit);
 	encoder->possible_clones = 0;
 
-	(void) drm_sysfs_connector_add(connector);
+	(void) drm_connector_register(connector);
 
 	drm_crtc_init(dev, crtc, &vmw_legacy_crtc_funcs);
 
 	drm_mode_crtc_set_gamma_size(crtc, 256);
 
-	drm_connector_attach_property(connector,
-				      dev->mode_config.dirty_info_property,
-				      1);
-	drm_connector_attach_property(connector,
-				      dev_priv->hotplug_mode_update_property, 1);
-	drm_connector_attach_property(connector,
-				      dev->mode_config.suggested_x_property, 0);
-	drm_connector_attach_property(connector,
-				      dev->mode_config.suggested_y_property, 0);
+	drm_object_attach_property(&connector->base,
+				   dev->mode_config.dirty_info_property,
+				   1);
+	drm_object_attach_property(&connector->base,
+				   dev_priv->hotplug_mode_update_property, 1);
+	drm_object_attach_property(&connector->base,
+				   dev->mode_config.suggested_x_property, 0);
+	drm_object_attach_property(&connector->base,
+				   dev->mode_config.suggested_y_property, 0);
 	if (dev_priv->implicit_placement_property)
-		drm_connector_attach_property
-			(connector,
+		drm_object_attach_property
+			(&connector->base,
 			 dev_priv->implicit_placement_property,
 			 1);
 

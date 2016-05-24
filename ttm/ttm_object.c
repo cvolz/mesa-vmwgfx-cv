@@ -56,6 +56,7 @@
  * for fast lookup of ref objects given a base object.
  */
 
+#define pr_fmt(fmt) "[TTM] " fmt
 #include "ttm/ttm_object.h"
 #include "ttm/ttm_module.h"
 #include <linux/list.h>
@@ -221,7 +222,7 @@ void ttm_base_object_unref(struct ttm_base_object **p_base)
 
 	*p_base = NULL;
 
-	kref_put(&base->refcount, &ttm_release_base);
+	kref_put(&base->refcount, ttm_release_base);
 }
 EXPORT_SYMBOL(ttm_base_object_unref);
 

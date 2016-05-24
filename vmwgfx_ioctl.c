@@ -156,7 +156,7 @@ static int vmw_fill_compat_cap(struct vmw_private *dev_priv, void *bounce,
 		max_size = SVGA3D_DEVCAP_MAX;
 
 	compat_cap->header.length =
-		(pair_offset + max_size * sizeof(SVGA3dCapPair)) / sizeof(u32); 
+		(pair_offset + max_size * sizeof(SVGA3dCapPair)) / sizeof(u32);
 	compat_cap->header.type = SVGA3DCAPS_RECORD_DEVCAPS;
 
 	spin_lock(&dev_priv->cap_lock);
@@ -167,7 +167,7 @@ static int vmw_fill_compat_cap(struct vmw_private *dev_priv, void *bounce,
 			(i, vmw_read(dev_priv, SVGA_REG_DEV_CAP));
 	}
 	spin_unlock(&dev_priv->cap_lock);
-	
+
 	return 0;
 }
 
@@ -211,7 +211,7 @@ int vmw_get_cap_3d_ioctl(struct drm_device *dev, void *data,
 	if (gb_objects && vmw_fp->gb_aware) {
 		size_t i, num;
 		uint32_t *bounce32 = (uint32_t *) bounce;
-		
+
 		num = size / sizeof(uint32_t);
 		if (num > SVGA3D_DEVCAP_MAX)
 			num = SVGA3D_DEVCAP_MAX;
@@ -233,6 +233,8 @@ int vmw_get_cap_3d_ioctl(struct drm_device *dev, void *data,
 	}
 
 	ret = copy_to_user(buffer, bounce, size);
+	if (ret)
+		ret = -EFAULT;
 out_err:
 	vfree(bounce);
 
@@ -252,7 +254,7 @@ int vmw_present_ioctl(struct drm_device *dev, void *data,
 	struct vmw_surface *surface;
 	struct drm_vmw_rect __user *clips_ptr;
 	struct drm_vmw_rect *clips = NULL;
-	struct drm_mode_object *obj;
+	struct drm_framebuffer *fb;
 	struct vmw_framebuffer *vfb;
 	struct vmw_resource *res;
 	uint32_t num_clips;
@@ -270,7 +272,7 @@ int vmw_present_ioctl(struct drm_device *dev, void *data,
 		goto out_clips;
 	}
 
-	clips = kzalloc(num_clips * sizeof(*clips), GFP_KERNEL);
+	clips = kcalloc(num_clips, sizeof(*clips), GFP_KERNEL);
 	if (clips == NULL) {
 		DRM_ERROR("Failed to allocate clip rect list.\n");
 		ret = -ENOMEM;
@@ -284,19 +286,15 @@ int vmw_present_ioctl(struct drm_device *dev, void *data,
 		goto out_no_copy;
 	}
 
-	ret = mutex_lock_interruptible(&dev->mode_config.mutex);
-	if (unlikely(ret != 0)) {
-		ret = -ERESTARTSYS;
-		goto out_no_mode_mutex;
-	}
+	drm_modeset_lock_all(dev);
 
-	obj = drm_mode_object_find(dev, arg->fb_id, DRM_MODE_OBJECT_FB);
-	if (!obj) {
+	fb = drm_framebuffer_lookup(dev, arg->fb_id);
+	if (!fb) {
 		DRM_ERROR("Invalid framebuffer id.\n");
-		ret = -EINVAL;
+		ret = -ENOENT;
 		goto out_no_fb;
 	}
-	vfb = vmw_framebuffer_to_vfb(obj_to_fb(obj));
+	vfb = vmw_framebuffer_to_vfb(fb);
 
 	ret = ttm_read_lock(&dev_priv->reservation_sem, true);
 	if (unlikely(ret != 0))
@@ -320,9 +318,9 @@ int vmw_present_ioctl(struct drm_device *dev, void *data,
 out_no_surface:
 	ttm_read_unlock(&dev_priv->reservation_sem);
 out_no_ttm_lock:
+	drm_framebuffer_unreference(fb);
 out_no_fb:
-	mutex_unlock(&dev->mode_config.mutex);
-out_no_mode_mutex:
+	drm_modeset_unlock_all(dev);
 out_no_copy:
 	kfree(clips);
 out_clips:
@@ -340,7 +338,7 @@ int vmw_present_readback_ioctl(struct drm_device *dev, void *data,
 		(unsigned long)arg->fence_rep;
 	struct drm_vmw_rect __user *clips_ptr;
 	struct drm_vmw_rect *clips = NULL;
-	struct drm_mode_object *obj;
+	struct drm_framebuffer *fb;
 	struct vmw_framebuffer *vfb;
 	uint32_t num_clips;
 	int ret;
@@ -357,7 +355,7 @@ int vmw_present_readback_ioctl(struct drm_device *dev, void *data,
 		goto out_clips;
 	}
 
-	clips = kzalloc(num_clips * sizeof(*clips), GFP_KERNEL);
+	clips = kcalloc(num_clips, sizeof(*clips), GFP_KERNEL);
 	if (clips == NULL) {
 		DRM_ERROR("Failed to allocate clip rect list.\n");
 		ret = -ENOMEM;
@@ -371,24 +369,20 @@ int vmw_present_readback_ioctl(struct drm_device *dev, void *data,
 		goto out_no_copy;
 	}
 
-	ret = mutex_lock_interruptible(&dev->mode_config.mutex);
-	if (unlikely(ret != 0)) {
-		ret = -ERESTARTSYS;
-		goto out_no_mode_mutex;
-	}
+	drm_modeset_lock_all(dev);
 
-	obj = drm_mode_object_find(dev, arg->fb_id, DRM_MODE_OBJECT_FB);
-	if (!obj) {
+	fb = drm_framebuffer_lookup(dev, arg->fb_id);
+	if (!fb) {
 		DRM_ERROR("Invalid framebuffer id.\n");
-		ret = -EINVAL;
+		ret = -ENOENT;
 		goto out_no_fb;
 	}
 
-	vfb = vmw_framebuffer_to_vfb(obj_to_fb(obj));
+	vfb = vmw_framebuffer_to_vfb(fb);
 	if (!vfb->dmabuf) {
 		DRM_ERROR("Framebuffer not dmabuf backed.\n");
 		ret = -EINVAL;
-		goto out_no_fb;
+		goto out_no_ttm_lock;
 	}
 
 	ret = ttm_read_lock(&dev_priv->reservation_sem, true);
@@ -401,9 +395,9 @@ int vmw_present_readback_ioctl(struct drm_device *dev, void *data,
 
 	ttm_read_unlock(&dev_priv->reservation_sem);
 out_no_ttm_lock:
+	drm_framebuffer_unreference(fb);
 out_no_fb:
-	mutex_unlock(&dev->mode_config.mutex);
-out_no_mode_mutex:
+	drm_modeset_unlock_all(dev);
 out_no_copy:
 	kfree(clips);
 out_clips:
