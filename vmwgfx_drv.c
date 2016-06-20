@@ -244,6 +244,7 @@ int force_no_3d;
 static int vmw_force_iommu;
 static int vmw_restrict_iommu;
 static int vmw_force_coherent;
+static int vmw_assume_16bpp;
 
 static int vmw_probe(struct pci_dev *, const struct pci_device_id *);
 static void vmw_master_init(struct vmw_master *);
@@ -258,6 +259,8 @@ MODULE_PARM_DESC(restrict_iommu, "Try to limit IOMMU usage for TTM pages");
 module_param_named(restrict_iommu, vmw_restrict_iommu, int, 0600);
 MODULE_PARM_DESC(force_coherent, "Force coherent TTM pages");
 module_param_named(force_coherent, vmw_force_coherent, int, 0600);
+MODULE_PARM_DESC(assume_16bpp, "Assume 16-bpp when filtering modes");
+module_param_named(assume_16bpp, vmw_assume_16bpp, int, 0600);
 
 #ifdef VMWGFX_STANDALONE
 MODULE_PARM_DESC(force_stealth, "Force stealth mode");
@@ -636,6 +639,8 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	dev_priv->io_start = pci_resource_start(dev->pdev, 0);
 	dev_priv->vram_start = pci_resource_start(dev->pdev, 1);
 	dev_priv->mmio_start = pci_resource_start(dev->pdev, 2);
+
+	dev_priv->assume_16bpp = !!vmw_assume_16bpp;
 
 #ifdef VMWGFX_STANDALONE
 	dev_priv->enable_fb = enable_fbdev && !force_stealth;
