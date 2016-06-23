@@ -1094,8 +1094,8 @@ out_unlock:
 	return ret;
 }
 
-static int ttm_bo_mem_compat(struct ttm_placement *placement,
-			     struct ttm_mem_reg *mem)
+int ttm_bo_mem_compat(struct ttm_placement *placement,
+		      struct ttm_mem_reg *mem)
 {
 	int i;
 
