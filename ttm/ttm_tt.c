@@ -355,10 +355,8 @@ int ttm_tt_set_user(struct ttm_tt *ttm,
 	if (unlikely(ret != 0))
 		return ret;
 
-	down_read(&mm->mmap_sem);
-	ret = get_user_pages(tsk, mm, start, num_pages,
-			     write, 0, ttm->pages, NULL);
-	up_read(&mm->mmap_sem);
+	ret = __get_user_pages_unlocked(tsk, mm, start, num_pages,
+					write, 0, ttm->pages, FOLL_TOUCH);
 
 	if (ret != num_pages && write) {
 		ttm_tt_free_user_pages(ttm);
@@ -505,7 +503,7 @@ static int ttm_tt_swapin(struct ttm_tt *ttm)
 		kunmap_atomic(from_virtual, KM_USER0);
 #endif
 		preempt_enable();
-		page_cache_release(from_page);
+		put_page(from_page);
 	}
 
 	if (!(ttm->page_flags & TTM_PAGE_FLAG_PERSISTANT_SWAP))
@@ -586,7 +584,7 @@ int ttm_tt_swapout(struct ttm_tt *ttm, struct file *persistant_swap_storage)
 		preempt_enable();
 		set_page_dirty(to_page);
 		mark_page_accessed(to_page);
-		page_cache_release(to_page);
+		put_page(to_page);
 	}
 
 	ttm_tt_free_alloced_pages(ttm);

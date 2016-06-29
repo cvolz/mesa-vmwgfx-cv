@@ -517,4 +517,21 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #include <linux/pfn_t.h>
 #endif
 
+/* __get_user_pages_unlocked() appeared in 4.0 */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0))
+static inline long
+__get_user_pages_unlocked(struct task_struct *tsk, struct mm_struct *mm,
+			  unsigned long start, unsigned long nr_pages,
+			  int write, int force, struct page **pages,
+			  unsigned int gup_flags)
+{
+	long ret;
+
+	down_read(&mm->mmap_sem);
+	ret = get_user_pages(tsk, mm, start, nr_pages, write, force, pages,
+			     NULL);
+	up_read(&mm->mmap_sem);
+	return ret;
+}
+#endif
 #endif

@@ -433,4 +433,9 @@ static inline void set_page_locked(struct page *page)
 #define WRITE_ONCE(_x, _val) READ_ONCE(_x) = _val
 #endif
 
+/* cpu_has_clflush disappeared in 4.7 */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0))
+#define cpu_has_clflush static_cpu_has(X86_FEATURE_CLFLUSH)
+#endif
+
 #endif
