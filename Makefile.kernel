@@ -7,6 +7,8 @@
 # $XFree86: xc/programs/Xserver/hw/xfree86/os-support/linux/drm/kernel/Makefile.kernel,v 1.18 2003/08/16 17:59:17 dawes Exp $
 #
 
+.PHONY : $(src)/vmwgfx_version.h
+
 vmwgfx-objs    := drm_auth.o drm_bufs.o drm_context.o drm_crtc.o \
 		drm_drv.o drm_fops.o drm_ioctl.o drm_irq.o drm_modes.o \
 		drm_edid.o drm_lock.o drm_memory.o drm_proc.o drm_stub.o \
@@ -29,7 +31,7 @@ vmwgfx-objs    := drm_auth.o drm_bufs.o drm_context.o drm_crtc.o \
 $(obj)/vmwgfx_drv.o: $(src)/vmwgfx_version.h
 
 $(src)/vmwgfx_version.h:
-	@echo "#define VMWGFX_GIT_VERSION \""`git --git-dir=$(src)/.git rev-parse --short HEAD`"\"" > $(src)/vmwgfx_version.h
+	@echo "#define VMWGFX_GIT_VERSION \""`git --git-dir=$(src)/.git rev-parse --short=10 HEAD`"\"" > $(src)/vmwgfx_version.h
 
 ifeq ($(CONFIG_COMPAT),y)
 vmwgfx-objs    += drm_ioc32.o
