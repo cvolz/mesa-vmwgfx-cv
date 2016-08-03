@@ -335,6 +335,23 @@ static const struct drm_connector_funcs vmw_legacy_connector_funcs = {
 	.destroy = vmw_ldu_connector_destroy,
 };
 
+/*
+ * Legacy Display Plane Functions
+ */
+
+static const struct drm_plane_funcs vmw_ldu_plane_funcs = {
+	.update_plane = drm_primary_helper_update,
+	.disable_plane = drm_primary_helper_disable,
+	.destroy = vmw_du_primary_plane_destroy,
+};
+
+static const struct drm_plane_funcs vmw_ldu_cursor_funcs = {
+	.update_plane = vmw_du_cursor_plane_update,
+	.disable_plane = vmw_du_cursor_plane_disable,
+	.destroy = vmw_du_cursor_plane_destroy,
+};
+
+
 static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 {
 	struct vmw_legacy_display_unit *ldu;
@@ -342,6 +359,7 @@ static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 	struct drm_connector *connector;
 	struct drm_encoder *encoder;
 	struct drm_crtc *crtc;
+	int ret;
 
 	ldu = kzalloc(sizeof(*ldu), GFP_KERNEL);
 	if (!ldu)
@@ -360,19 +378,61 @@ static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 	ldu->base.pref_mode = NULL;
 	ldu->base.is_implicit = true;
 
-	drm_connector_init(dev, connector, &vmw_legacy_connector_funcs,
-			   DRM_MODE_CONNECTOR_VIRTUAL);
+	/* Initialize primary plane */
+	ret = drm_universal_plane_init(dev, &ldu->base.primary,
+				       0, &vmw_ldu_plane_funcs,
+				       vmw_primary_plane_formats,
+				       ARRAY_SIZE(vmw_primary_plane_formats),
+				       DRM_PLANE_TYPE_PRIMARY, NULL);
+	if (ret) {
+		DRM_ERROR("Failed to initialize primary plane");
+		goto err_free;
+	}
+
+	/* Initialize cursor plane */
+	ret = drm_universal_plane_init(dev, &ldu->base.cursor,
+			0, &vmw_ldu_cursor_funcs,
+			vmw_cursor_plane_formats,
+			ARRAY_SIZE(vmw_cursor_plane_formats),
+			DRM_PLANE_TYPE_CURSOR, NULL);
+	if (ret) {
+		DRM_ERROR("Failed to initialize cursor plane");
+		drm_plane_cleanup(&ldu->base.primary);
+		goto err_free;
+	}
+
+	ret = drm_connector_init(dev, connector, &vmw_legacy_connector_funcs,
+				 DRM_MODE_CONNECTOR_VIRTUAL);
+	if (ret) {
+		DRM_ERROR("Failed to initialize connector\n");
+		goto err_free;
+	}
 	connector->status = vmw_du_connector_detect(connector, true);
 
-	drm_encoder_init(dev, encoder, &vmw_legacy_encoder_funcs,
-			 DRM_MODE_ENCODER_VIRTUAL, NULL);
-	drm_mode_connector_attach_encoder(connector, encoder);
+	ret = drm_encoder_init(dev, encoder, &vmw_legacy_encoder_funcs,
+			       DRM_MODE_ENCODER_VIRTUAL, NULL);
+	if (ret) {
+		DRM_ERROR("Failed to initialize encoder\n");
+		goto err_free_connector;
+	}
+
+	(void) drm_mode_connector_attach_encoder(connector, encoder);
 	encoder->possible_crtcs = (1 << unit);
 	encoder->possible_clones = 0;
 
-	(void) drm_connector_register(connector);
+	ret = drm_connector_register(connector);
+	if (ret) {
+		DRM_ERROR("Failed to register connector\n");
+		goto err_free_encoder;
+	}
 
-	drm_crtc_init(dev, crtc, &vmw_legacy_crtc_funcs);
+	ret = drm_crtc_init_with_planes(dev, crtc, &ldu->base.primary,
+					&ldu->base.cursor,
+					&vmw_legacy_crtc_funcs, NULL);
+	if (ret) {
+		DRM_ERROR("Failed to initialize CRTC\n");
+		goto err_free_unregister;
+	}
 
 	drm_mode_crtc_set_gamma_size(crtc, 256);
 
@@ -392,6 +452,16 @@ static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 			 1);
 
 	return 0;
+
+err_free_unregister:
+	drm_connector_unregister(connector);
+err_free_encoder:
+	drm_encoder_cleanup(encoder);
+err_free_connector:
+	drm_connector_cleanup(connector);
+err_free:
+	kfree(ldu);
+	return ret;
 }
 
 int vmw_kms_ldu_init_display(struct vmw_private *dev_priv)
