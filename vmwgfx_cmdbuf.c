@@ -804,8 +804,8 @@ static int vmw_cmdbuf_space_pool(struct vmw_cmdbuf_man *man,
 	if (IS_ERR(header->node))
 		return PTR_ERR(header->node);
 
-	header->cb_header = dma_pool_alloc(man->headers, GFP_KERNEL,
-					   &header->handle);
+	header->cb_header = dma_pool_zalloc(man->headers, GFP_KERNEL,
+					    &header->handle);
 	if (!header->cb_header) {
 		ret = -ENOMEM;
 		goto out_no_cb_header;
@@ -815,7 +815,6 @@ static int vmw_cmdbuf_space_pool(struct vmw_cmdbuf_man *man,
 	cb_hdr = header->cb_header;
 	offset = header->node->start << PAGE_SHIFT;
 	header->cmd = man->map + offset;
-	memset(cb_hdr, 0, sizeof(*cb_hdr));
 	if (man->using_mob) {
 		cb_hdr->flags = SVGA_CB_FLAG_MOB;
 		cb_hdr->ptr.mob.mobid = man->cmd_space->mem.start;
@@ -852,8 +851,8 @@ static int vmw_cmdbuf_space_inline(struct vmw_cmdbuf_man *man,
 	if (WARN_ON_ONCE(size > VMW_CMDBUF_INLINE_SIZE))
 		return -ENOMEM;
 
-	dheader = dma_pool_alloc(man->dheaders, GFP_KERNEL,
-				 &header->handle);
+	dheader = dma_pool_zalloc(man->dheaders, GFP_KERNEL,
+				  &header->handle);
 	if (!dheader)
 		return -ENOMEM;
 
@@ -862,7 +861,6 @@ static int vmw_cmdbuf_space_inline(struct vmw_cmdbuf_man *man,
 	cb_hdr = &dheader->cb_header;
 	header->cb_header = cb_hdr;
 	header->cmd = dheader->cmd;
-	memset(dheader, 0, sizeof(*dheader));
 	cb_hdr->status = SVGA_CB_STATUS_NONE;
 	cb_hdr->flags = SVGA_CB_FLAG_NONE;
 	cb_hdr->ptr.pa = (u64)header->handle +
