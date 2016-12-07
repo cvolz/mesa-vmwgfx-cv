@@ -605,7 +605,7 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	char host_log[100] = {0};
 
 	dev_priv = kzalloc(sizeof(*dev_priv), GFP_KERNEL);
-	if (unlikely(dev_priv == NULL)) {
+	if (unlikely(!dev_priv)) {
 		DRM_ERROR("Failed allocating a device private struct.\n");
 		return -ENOMEM;
 	}
@@ -1043,7 +1043,7 @@ static int vmw_driver_open(struct drm_device *dev, struct drm_file *file_priv)
 		dev_priv->bdev.dev_mapping = dev->dev_mapping;
 
 	vmw_fp = kzalloc(sizeof(*vmw_fp), GFP_KERNEL);
-	if (unlikely(vmw_fp == NULL))
+	if (unlikely(!vmw_fp))
 		return ret;
 
 	INIT_LIST_HEAD(&vmw_fp->fence_events);
@@ -1218,7 +1218,7 @@ static int vmw_master_create(struct drm_device *dev,
 	struct vmw_master *vmaster;
 
 	vmaster = kzalloc(sizeof(*vmaster), GFP_KERNEL);
-	if (unlikely(vmaster == NULL))
+	if (unlikely(!vmaster))
 		return -ENOMEM;
 
 	vmw_master_init(vmaster);
