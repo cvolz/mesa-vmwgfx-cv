@@ -53,6 +53,7 @@ sis.kld
 stamp-h1
 tdfx.kld
 via.kld
+tags
 tests/auth
 tests/dristat
 tests/drmstat
