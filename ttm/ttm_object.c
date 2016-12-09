@@ -682,7 +682,8 @@ int ttm_prime_handle_to_fd(struct ttm_object_file *tfile,
 
 	dma_buf = prime->dma_buf;
 	if (!dma_buf || !get_dma_buf_unless_doomed(dma_buf)) {
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) || \
+     RHEL_VERSION_CODE >= RHEL_RELEASE_VERSION(7, 3))
 		DEFINE_DMA_BUF_EXPORT_INFO(exp_info);
 
 		exp_info.ops = &tdev->ops;
@@ -700,7 +701,8 @@ int ttm_prime_handle_to_fd(struct ttm_object_file *tfile,
 			mutex_unlock(&prime->mutex);
 			goto out_unref;
 		}
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 1, 0) || \
+     RHEL_VERSION_CODE >= RHEL_RELEASE_VERSION(7, 3))
 		dma_buf = dma_buf_export(&exp_info);
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
 		dma_buf = dma_buf_export(prime, &tdev->ops,

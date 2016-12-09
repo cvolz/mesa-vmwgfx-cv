@@ -34,6 +34,17 @@
 #ifndef _DRM_COMPAT_H_
 #define _DRM_COMPAT_H_
 
+/*
+ * For non-RHEL distros, set major and minor to 0
+ */
+#ifndef RHEL_RELEASE_VERSION
+#define RHEL_RELEASE_VERSION(a, b) (((a) << 8) + (b))
+#define RHEL_MAJOR 0
+#define RHEL_MINOR 0
+#endif
+
+#define RHEL_VERSION_CODE RHEL_RELEASE_VERSION(RHEL_MAJOR, RHEL_MINOR)
+
 #ifndef minor
 #define minor(x) MINOR((x))
 #endif
@@ -419,7 +430,8 @@ static inline void set_page_locked(struct page *page)
 #endif
 
 /* set_mb__[before|after]_atomic appeared in 3.16 */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3))
 #define smp_mb__before_atomic() smp_mb__before_atomic_inc()
 #define smp_mb__after_atomic() smp_mb__after_atomic_inc()
 #endif
@@ -428,7 +440,8 @@ static inline void set_page_locked(struct page *page)
  * READ_ONCE, WRITE_ONCE appeared in 3.19.
  * This is a simplified version for scalar use only.
  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 8))
 #define READ_ONCE(_x) (*(volatile typeof(_x) *)&(_x))
 #define WRITE_ONCE(_x, _val) READ_ONCE(_x) = _val
 #endif

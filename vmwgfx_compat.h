@@ -37,6 +37,17 @@
 #define VMWGFX_STANDALONE
 #define TTM_STANDALONE
 
+/*
+ * For non-RHEL distros, set major and minor to 0
+ */
+#ifndef RHEL_RELEASE_VERSION
+#define RHEL_RELEASE_VERSION(a, b) (((a) << 8) + (b))
+#define RHEL_MAJOR 0
+#define RHEL_MINOR 0
+#endif
+
+#define RHEL_VERSION_CODE RHEL_RELEASE_VERSION(RHEL_MAJOR, RHEL_MINOR)
+
 #undef EXPORT_SYMBOL
 #define EXPORT_SYMBOL(_sym)
 
@@ -210,7 +221,8 @@ static inline void vmwgfx_lcp(struct list_head *list,
  * set_pages_array_wc
  * No caching attributes on vmwgfx.
  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,35))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 35) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 8))
 static inline int set_pages_array_wc(struct page **pages, int addrinarray)
 {
 	return 0;
@@ -347,7 +359,8 @@ static inline int __must_check kref_get_unless_zero(struct kref *kref)
 	} while (0)
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 8))
 #ifdef CONFIG_SWIOTLB
 #define swiotlb_nr_tbl() (1)
 #endif
@@ -360,7 +373,8 @@ int sg_alloc_table_from_pages(struct sg_table *sgt,
 			      gfp_t gfp_mask);
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 8))
 /*
  * sg page iterator
  *
@@ -386,7 +400,8 @@ void __sg_page_iter_start(struct sg_page_iter *piter,
 			  struct scatterlist *sglist, unsigned int nents,
 			  unsigned long pgoffset);
 #endif
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 10, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 8))
 /**
  * sg_page_iter_page - get the current page held by the page iterator
  * @piter:	page iterator holding the page
@@ -483,13 +498,15 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #endif
 
 /* set_mb__[before|after]_atomic appeared in 3.16 */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 16, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3))
 #define smp_mb__before_atomic() smp_mb__before_atomic_inc()
 #define smp_mb__after_atomic() smp_mb__after_atomic_inc()
 #endif
 
 /* memremap appeared in 4.3 */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 3, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3))
 #define memremap(_offset, _size, _flag)		\
 	(void __force *)ioremap_cache(_offset, _size)
 #define memunmap(_addr)				\
@@ -510,7 +527,8 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 /*
  * pfn_t was introduced in 4.5, and also the pfn flag PFN_DEV
  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3))
 #define __pfn_to_pfn_t(__pfn, __dummy) (__pfn)
 #define PFN_DEV (1UL << (BITS_PER_LONG - 3))
 #else
@@ -518,7 +536,8 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #endif
 
 /* __get_user_pages_unlocked() appeared in 4.0 */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3))
 static inline long
 __get_user_pages_unlocked(struct task_struct *tsk, struct mm_struct *mm,
 			  unsigned long start, unsigned long nr_pages,
@@ -534,4 +553,15 @@ __get_user_pages_unlocked(struct task_struct *tsk, struct mm_struct *mm,
 	return ret;
 }
 #endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3))
+#include <linux/dmapool.h>
+static inline void *dma_pool_zalloc(struct dma_pool *pool, gfp_t mem_flags,
+				    dma_addr_t *handle)
+{
+	return dma_pool_alloc(pool, mem_flags | __GFP_ZERO, handle);
+}
+#endif
+
 #endif
