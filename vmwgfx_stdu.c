@@ -1019,6 +1019,9 @@ static const struct drm_crtc_funcs vmw_stdu_crtc_funcs = {
 	.cursor_move = vmw_du_crtc_cursor_move,
 	.gamma_set = vmw_du_crtc_gamma_set,
 	.destroy = vmw_stdu_crtc_destroy,
+	.reset = vmw_du_crtc_reset,
+	.atomic_duplicate_state = vmw_du_crtc_duplicate_state,
+	.atomic_destroy_state = vmw_du_crtc_destroy_state,
 	.set_config = vmw_stdu_crtc_set_config,
 	.page_flip = vmw_stdu_crtc_page_flip,
 };
@@ -1133,6 +1136,11 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 	stdu->base.pref_active = (unit == 0);
 	stdu->base.pref_width  = dev_priv->initial_width;
 	stdu->base.pref_height = dev_priv->initial_height;
+
+	/*
+	 * Remove this after enabling atomic because property values can
+	 * only exist in a state object
+	 */
 	stdu->base.is_implicit = false;
 
 	/* Initialize primary plane */
@@ -1183,6 +1191,8 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 		goto err_free_encoder;
 	}
 
+	/* FIXME: Turn on after plane/connector states are implemented. */
+	/* vmw_du_crtc_reset(crtc); */
 	ret = drm_crtc_init_with_planes(dev, crtc, &stdu->base.primary,
 					&stdu->base.cursor,
 					&vmw_stdu_crtc_funcs, NULL);
