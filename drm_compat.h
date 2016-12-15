@@ -451,4 +451,6 @@ static inline void set_page_locked(struct page *page)
 #define cpu_has_clflush static_cpu_has(X86_FEATURE_CLFLUSH)
 #endif
 
+#define ihold(_inode) atomic_inc(&((_inode)->i_count))
+
 #endif

@@ -34,7 +34,7 @@
 #ifndef VMWGFX_STANDALONE
 #include <linux/dma-buf.h>
 #endif
-#include <drm/ttm/ttm_object.h>
+#include "ttm/ttm_object.h"
 
 /*
  * DMA-BUF attach- and mapping methods. No need to implement

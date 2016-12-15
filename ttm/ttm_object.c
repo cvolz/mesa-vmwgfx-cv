@@ -62,7 +62,7 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/module.h>
-#include <linux/atomic.h>
+#include <asm/atomic.h>
 #include "vmwgfx_compat.h"
 
 struct ttm_object_file {

@@ -547,4 +547,16 @@ __get_user_pages_unlocked(struct task_struct *tsk, struct mm_struct *mm,
 }
 #endif
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0))
+#define kmalloc_array(_n, _size, _gfp)		\
+  kmalloc((_n) * (_size), _gfp)
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37))
+#define vzalloc(_size)					     \
+  ({ void *tmp = vmalloc(_size);			     \
+    memset(tmp, 0, _size);				     \
+    tmp;})
+#endif
+
 #endif
