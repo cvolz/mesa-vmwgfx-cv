@@ -215,7 +215,7 @@ static inline void vmwgfx_lcp(struct list_head *list,
  * No caching attributes on vmwgfx.
  */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 35) && \
-     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 8))
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 5))
 static inline int set_pages_array_wc(struct page **pages, int addrinarray)
 {
 	return 0;
@@ -353,7 +353,7 @@ static inline int __must_check kref_get_unless_zero(struct kref *kref)
 #endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0) && \
-     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 8))
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 5))
 #ifdef CONFIG_SWIOTLB
 #define swiotlb_nr_tbl() (1)
 #endif
