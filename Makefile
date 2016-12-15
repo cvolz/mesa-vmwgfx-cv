@@ -70,6 +70,7 @@ VMWGFXHEADERS = vmwgfx_drv.h vmwgfx_reg.h vmwgfx_drm.h\
 CLEANFILES = *.o *.ko .depend .*.flags .*.d .*.cmd *.mod.c .tmp_versions\
 	Module.markers modules.order Module.symvers 
 
+STANDALONE = -DVMWGFX_STANDALONE -DTTM_STANDALONE
 # VERSION is not defined from the initial invocation.  It is defined when
 # this Makefile is invoked from the kernel's root Makefile.
 
@@ -136,7 +137,7 @@ endif
 all: modules
 
 modules: 
-	+make -C $(LINUXDIR) $(GETCONFIG) SUBDIRS=`/bin/pwd` DRMSRCDIR=`/bin/pwd` modules
+	+make -C $(LINUXDIR) $(GETCONFIG) KCPPFLAGS="$(STANDALONE)" SUBDIRS=`/bin/pwd` DRMSRCDIR=`/bin/pwd` modules
 
 ifeq ($(HEADERFROMBOOT),1)
 
@@ -183,7 +184,7 @@ $(MODULE_LIST)::
 	make DRM_MODULES=$@ modules
 
 install:
-	make -C $(LINUXDIR) $(GETCONFIG) SUBDIRS=`/bin/pwd` DRMSRCDIR=`/bin/pwd` modules_install
+	make -C $(LINUXDIR) $(GETCONFIG) KCPPFLAGS="$(STANDALONE)" SUBDIRS=`/bin/pwd` DRMSRCDIR=`/bin/pwd` modules_install
 
 else
 

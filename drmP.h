@@ -84,7 +84,6 @@ struct drm_device;
 #include "drm_hashtab.h"
 #include "drm_mm.h"
 
-#define VMWGFX_STANDALONE
 #ifdef VMWGFX_STANDALONE
 
 #include <linux/version.h>

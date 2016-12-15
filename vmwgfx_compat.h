@@ -31,13 +31,6 @@
 #include <linux/scatterlist.h>
 
 /*
- * Defines for standalone building.
- */
-
-#define VMWGFX_STANDALONE
-#define TTM_STANDALONE
-
-/*
  * For non-RHEL distros, set major and minor to 0
  */
 #ifndef RHEL_RELEASE_VERSION
