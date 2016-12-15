@@ -34,6 +34,13 @@
 #ifndef _DRM_COMPAT_H_
 #define _DRM_COMPAT_H_
 
+#include <linux/version.h>
+#include <linux/list.h>
+#include <linux/sched.h>
+#include <linux/module.h>
+
+#include <asm/pgalloc.h>
+
 /*
  * For non-RHEL distros, set major and minor to 0
  */
@@ -451,6 +458,30 @@ static inline void set_page_locked(struct page *page)
 #define cpu_has_clflush static_cpu_has(X86_FEATURE_CLFLUSH)
 #endif
 
+/* Replicate the functionality of ihold, except a refcount warning */
 #define ihold(_inode) atomic_inc(&((_inode)->i_count))
+
+/* Ignore the annotation if not present */
+#ifndef __rcu
+#define __rcu
+#endif
+
+/* RCU_INIT_POINTER is an optimized version of rcu_assign_pointer */
+#ifndef RCU_INIT_POINTER
+#define RCU_INIT_POINTER(_a, _b) rcu_assign_pointer(_a, _b)
+#endif
+
+/*
+ * seqcount_init, contrary to __seqcount init creates a lock class of its
+ * own. This should be safe, but may not be identical on lock debugging builds
+ */
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 13, 0))
+#define __seqcount_init(_a, _b, _c) seqcount_init(_a)
+#endif
+
+/* wake_up_state is not exported, but wake_up_process is. */
+#define wake_up_state(_p, _s)			\
+	({BUILD_BUG_ON(_s != TASK_NORMAL);	\
+		wake_up_process(_p); })
 
 #endif

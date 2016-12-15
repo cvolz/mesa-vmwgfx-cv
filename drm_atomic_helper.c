@@ -30,7 +30,11 @@
 #include "drm_plane_helper.h"
 #include "drm_crtc_helper.h"
 #include "drm_atomic_helper.h"
+#ifdef VMWGFX_STANDALONE
+#include "core/fence.h"
+#else
 #include <linux/fence.h>
+#endif
 
 /**
  * DOC: overview

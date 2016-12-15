@@ -27,7 +27,11 @@
 
 #ifndef _VMWGFX_FENCE_H_
 
+#ifdef VMWGFX_STANDALONE
+#include "core/fence.h"
+#else
 #include <linux/fence.h>
+#endif
 
 #define VMW_FENCE_WAIT_TIMEOUT (5*HZ)
 

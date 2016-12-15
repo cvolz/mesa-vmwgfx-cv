@@ -40,7 +40,7 @@
 #include <linux/mutex.h>
 #include <linux/mm.h>
 #include <linux/bitmap.h>
-#include <linux/reservation.h>
+#include "core/reservation.h"
 
 struct ttm_bo_device;
 

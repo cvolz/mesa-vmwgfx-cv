@@ -37,7 +37,11 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <linux/module.h>
-#include <linux/reservation.h>
+#ifdef TTM_STANDALONE
+#include "core/reservation.h"
+#else
+#include <include/reservation.h>
+#endif
 
 void ttm_bo_free_old_node(struct ttm_buffer_object *bo)
 {

@@ -39,7 +39,11 @@
 #include <linux/file.h>
 #include <linux/module.h>
 #include <linux/atomic.h>
+#ifdef TTM_STANDALONE
+#include "core/reservation.h"
+#else
 #include <linux/reservation.h>
+#endif
 
 #define TTM_ASSERT_LOCKED(param)
 #define TTM_DEBUG(fmt, arg...)
