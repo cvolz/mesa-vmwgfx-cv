@@ -93,7 +93,8 @@ static ssize_t enabled_show(struct device *device,
 }
 
 static ssize_t edid_show(
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35)
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35) || \
+     RHEL_VERSION_CODE >= RHEL_RELEASE_VERSION(6, 5))
                          struct file *file,
 #endif
                          struct kobject *kobj, struct bin_attribute *attr,
