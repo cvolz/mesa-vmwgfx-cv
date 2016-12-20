@@ -554,14 +554,4 @@ __get_user_pages_unlocked(struct task_struct *tsk, struct mm_struct *mm,
 }
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0) && \
-     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3))
-#include <linux/dmapool.h>
-static inline void *dma_pool_zalloc(struct dma_pool *pool, gfp_t mem_flags,
-				    dma_addr_t *handle)
-{
-	return dma_pool_alloc(pool, mem_flags | __GFP_ZERO, handle);
-}
-#endif
-
 #endif

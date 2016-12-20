@@ -804,8 +804,16 @@ static int vmw_cmdbuf_space_pool(struct vmw_cmdbuf_man *man,
 	if (IS_ERR(header->node))
 		return PTR_ERR(header->node);
 
+#ifndef VMWGFX_STANDALONE
 	header->cb_header = dma_pool_zalloc(man->headers, GFP_KERNEL,
 					    &header->handle);
+#else
+	header->cb_header = dma_pool_alloc(man->headers, GFP_KERNEL,
+					   &header->handle);
+	if (header->cb_header)
+		memset(header->cb_header, 0, sizeof(*header->cb_header));
+#endif
+
 	if (!header->cb_header) {
 		ret = -ENOMEM;
 		goto out_no_cb_header;
@@ -851,10 +859,18 @@ static int vmw_cmdbuf_space_inline(struct vmw_cmdbuf_man *man,
 	if (WARN_ON_ONCE(size > VMW_CMDBUF_INLINE_SIZE))
 		return -ENOMEM;
 
+#ifndef VMWGFX_STANDALONE
 	dheader = dma_pool_zalloc(man->dheaders, GFP_KERNEL,
 				  &header->handle);
+#else
+	dheader = dma_pool_alloc(man->dheaders, GFP_KERNEL,
+				 &header->handle);
+	if (dheader)
+		memset(dheader, 0, sizeof(*dheader));
+#endif
 	if (!dheader)
 		return -ENOMEM;
+
 
 	header->inline_space = true;
 	header->size = VMW_CMDBUF_INLINE_SIZE;
