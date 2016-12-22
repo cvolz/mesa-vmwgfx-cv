@@ -32,6 +32,7 @@
  */
 
 #define pr_fmt(fmt) "[TTM] " fmt
+#include "vmwgfx_compat.h"
 
 #include <linux/list.h>
 #include <linux/spinlock.h>
@@ -48,8 +49,10 @@
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_page_alloc.h"
 
+#ifndef VMWGFX_STANDALONE
 #if IS_ENABLED(CONFIG_AGP)
 #include <asm/agp.h>
+#endif
 #endif
 
 #define NUM_PAGES_TO_ALLOC		(PAGE_SIZE/sizeof(struct page *))

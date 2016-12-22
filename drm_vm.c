@@ -44,6 +44,7 @@
 #include "drm_internal.h"
 #include "drm_legacy.h"
 
+#ifndef VMWGFX_STANDALONE
 struct drm_vma_entry {
 	struct list_head head;
 	struct vm_area_struct *vma;
@@ -724,3 +725,4 @@ int drm_vma_info(struct seq_file *m, void *data)
 	mutex_unlock(&dev->struct_mutex);
 	return 0;
 }
+#endif

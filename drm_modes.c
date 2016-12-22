@@ -35,8 +35,12 @@
 #include <linux/export.h>
 #include "drmP.h"
 #include "drm_crtc.h"
+
+#ifndef VMWGFX_STANDALONE
 #include <video/of_videomode.h>
 #include <video/videomode.h>
+#endif
+
 #include "drm_modes.h"
 
 #include "drm_crtc_internal.h"

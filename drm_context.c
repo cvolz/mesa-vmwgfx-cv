@@ -71,39 +71,18 @@ void drm_legacy_ctxbitmap_free(struct drm_device * dev, int ctx_handle)
  * Allocate a new idr from drm_device::ctx_idr while holding the
  * drm_device::struct_mutex lock.
  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
-static int drm_legacy_ctxbitmap_next(struct drm_device * dev)
-{
-	int new_id;
-	int ret;
-
-again:
-	if (idr_pre_get(&dev->ctx_idr, GFP_KERNEL) == 0) {
-		DRM_ERROR("Out of memory expanding drawable idr\n");
-		return -ENOMEM;
-	}
-	mutex_lock(&dev->struct_mutex);
-	ret = idr_get_new_above(&dev->ctx_idr, NULL,
-				DRM_RESERVED_CONTEXTS, &new_id);
-	if (ret == -EAGAIN) {
-		mutex_unlock(&dev->struct_mutex);
-		goto again;
-	}
-	mutex_unlock(&dev->struct_mutex);
-	return new_id;
-}
-#else
 static int drm_legacy_ctxbitmap_next(struct drm_device *dev)
 {
 	int ret;
 
 	mutex_lock(&dev->struct_mutex);
+	VMWGFX_STANDALONE_IDR_PRELOAD(GFP_KERNEL);
 	ret = idr_alloc(&dev->ctx_idr, NULL, DRM_RESERVED_CONTEXTS, 0,
 			GFP_KERNEL);
+	VMWGFX_STANDALONE_IDR_PRELOAD_END();
 	mutex_unlock(&dev->struct_mutex);
 	return ret;
 }
-#endif
 
 /**
  * Context bitmap initialization.

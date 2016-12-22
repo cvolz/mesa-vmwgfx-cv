@@ -40,7 +40,7 @@
 #include "linux/workqueue.h"
 #include "linux/fs.h"
 #include "linux/spinlock.h"
-#include "linux/reservation.h"
+#include "core/reservation.h"
 
 struct ttm_backend_func {
 	/**
@@ -1039,6 +1039,7 @@ extern pgprot_t ttm_io_prot(uint32_t caching_flags, pgprot_t tmp);
 
 extern const struct ttm_mem_type_manager_func ttm_bo_manager_func;
 
+#ifndef VMWGFX_STANDALONE
 #if IS_ENABLED(CONFIG_AGP)
 #include <linux/agp_backend.h>
 
@@ -1062,6 +1063,7 @@ extern struct ttm_tt *ttm_agp_tt_create(struct ttm_bo_device *bdev,
 					struct page *dummy_read_page);
 int ttm_agp_tt_populate(struct ttm_tt *ttm);
 void ttm_agp_tt_unpopulate(struct ttm_tt *ttm);
+#endif
 #endif
 
 #endif

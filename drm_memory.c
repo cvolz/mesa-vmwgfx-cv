@@ -38,6 +38,7 @@
 #include "drmP.h"
 #include "drm_legacy.h"
 
+#ifndef VMWGFX_STANDALONE
 #if IS_ENABLED(CONFIG_AGP)
 
 #ifdef HAVE_PAGE_AGP
@@ -149,3 +150,4 @@ void drm_legacy_ioremapfree(struct drm_local_map *map, struct drm_device *dev)
 		iounmap((void __iomem *)map->handle);
 }
 EXPORT_SYMBOL(drm_legacy_ioremapfree);
+#endif

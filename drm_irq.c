@@ -716,6 +716,7 @@ void drm_calc_timestamping_constants(struct drm_crtc *crtc,
 }
 EXPORT_SYMBOL(drm_calc_timestamping_constants);
 
+#ifndef VMWGFX_STANDALONE
 /**
  * drm_calc_vbltimestamp_from_scanoutpos - precise vblank timestamp helper
  * @dev: DRM device
@@ -870,6 +871,8 @@ int drm_calc_vbltimestamp_from_scanoutpos(struct drm_device *dev,
 	return ret;
 }
 EXPORT_SYMBOL(drm_calc_vbltimestamp_from_scanoutpos);
+
+#endif
 
 static struct timeval get_drm_timestamp(void)
 {

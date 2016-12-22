@@ -30,8 +30,8 @@
 #include <linux/types.h>
 #include <linux/idr.h>
 #include <linux/fb.h>
-#include <linux/hdmi.h>
-#include <linux/media-bus-format.h>
+//#include <linux/hdmi.h>
+//#include <linux/media-bus-format.h>
 #include "drm_mode.h"
 #include "drm_fourcc.h"
 #include "drm_modeset_lock.h"
@@ -2496,7 +2496,9 @@ extern int drm_mode_gamma_get_ioctl(struct drm_device *dev,
 extern int drm_mode_gamma_set_ioctl(struct drm_device *dev,
 				    void *data, struct drm_file *file_priv);
 extern u8 drm_match_cea_mode(const struct drm_display_mode *to_match);
+#ifndef VMWGFX_STANDALONE
 extern enum hdmi_picture_aspect drm_get_cea_aspect_ratio(const u8 video_code);
+#endif
 extern bool drm_detect_hdmi_monitor(struct edid *edid);
 extern bool drm_detect_monitor_audio(struct edid *edid);
 extern bool drm_rgb_quant_range_selectable(struct edid *edid);

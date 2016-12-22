@@ -42,10 +42,11 @@
 #include "drm_hashtab.h"
 #include <linux/kref.h>
 #include <ttm/ttm_memory.h>
-#include "vmwgfx_compat.h"
 #ifndef TTM_STANDALONE
 #include <linux/dma-buf.h>
 #endif
+
+struct dma_buf_ops;
 
 /**
  * enum ttm_ref_type

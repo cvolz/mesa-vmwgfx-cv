@@ -28,6 +28,7 @@
  * Authors: Thomas Hellstrom <thellstrom-at-vmware-dot-com>
  */
 
+#include "vmwgfx_compat.h"
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_placement.h"
 #include "drm_vma_manager.h"

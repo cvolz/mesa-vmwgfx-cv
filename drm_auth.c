@@ -43,6 +43,7 @@
  *
  * Returns: 0 on success, negative error code on failure.
  */
+
 int drm_getmagic(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
 	struct drm_auth *auth = data;
@@ -50,8 +51,10 @@ int drm_getmagic(struct drm_device *dev, void *data, struct drm_file *file_priv)
 
 	mutex_lock(&dev->struct_mutex);
 	if (!file_priv->magic) {
+		VMWGFX_STANDALONE_IDR_PRELOAD(GFP_KERNEL);
 		ret = idr_alloc(&file_priv->master->magic_map, file_priv,
 				1, 0, GFP_KERNEL);
+		VMWGFX_STANDALONE_IDR_PRELOAD_END();
 		if (ret >= 0)
 			file_priv->magic = ret;
 	}

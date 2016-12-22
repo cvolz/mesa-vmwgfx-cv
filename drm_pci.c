@@ -232,6 +232,7 @@ int drm_irq_by_busid(struct drm_device *dev, void *data,
 	return drm_pci_irq_by_busid(dev, p);
 }
 
+#ifndef VMWGFX_STANDALONE
 static void drm_pci_agp_init(struct drm_device *dev)
 {
 	if (drm_core_check_feature(dev, DRIVER_USE_AGP)) {
@@ -256,6 +257,7 @@ void drm_pci_agp_destroy(struct drm_device *dev)
 	}
 }
 
+#endif
 /**
  * drm_get_pci_dev - Register a PCI device with the DRM subsystem
  * @pdev: PCI device
@@ -295,7 +297,9 @@ int drm_get_pci_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 	if (drm_core_check_feature(dev, DRIVER_MODESET))
 		pci_set_drvdata(pdev, dev);
 
+#ifndef VMWGFX_STANDALONE
 	drm_pci_agp_init(dev);
+#endif
 
 	ret = drm_dev_register(dev, ent->driver_data);
 	if (ret)
@@ -313,7 +317,11 @@ int drm_get_pci_dev(struct pci_dev *pdev, const struct pci_device_id *ent,
 	return 0;
 
 err_agp:
+
+#ifndef VMWGFX_STANDALONE
 	drm_pci_agp_destroy(dev);
+#endif
+
 	pci_disable_device(pdev);
 err_free:
 	drm_dev_unref(dev);
@@ -372,6 +380,7 @@ int drm_pci_init(struct drm_driver *driver, struct pci_driver *pdriver)
 	return 0;
 }
 
+#ifndef VMWGFX_STANDALONE
 int drm_pcie_get_speed_cap_mask(struct drm_device *dev, u32 *mask)
 {
 	struct pci_dev *root;
@@ -429,6 +438,7 @@ int drm_pcie_get_max_link_width(struct drm_device *dev, u32 *mlw)
 	return 0;
 }
 EXPORT_SYMBOL(drm_pcie_get_max_link_width);
+#endif
 
 #else
 

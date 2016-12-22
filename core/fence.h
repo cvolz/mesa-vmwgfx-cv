@@ -21,6 +21,7 @@
 #ifndef __LINUX_FENCE_H
 #define __LINUX_FENCE_H
 
+#ifndef VMWGFX_STANDALONE
 #include <linux/err.h>
 #include <linux/wait.h>
 #include <linux/list.h>
@@ -29,12 +30,15 @@
 #include <linux/sched.h>
 #include <linux/printk.h>
 #include <linux/rcupdate.h>
-
-#ifdef VMWGFX_STANDALONE
-
-#define __DMA_BUF_H__ /* Avoid including the dma-buf header from compat. */
-#include "vmwgfx_compat.h"
-
+#else
+#include "common_compat.h"
+#include <linux/err.h>
+#include <linux/wait.h>
+#include <linux/list.h>
+#include <linux/bitops.h>
+#include <linux/kref.h>
+#include <linux/sched.h>
+#include <linux/rcupdate.h>
 #endif
 
 struct fence;
@@ -77,9 +81,15 @@ struct fence_cb;
  * been completed, or never called at all.
  */
 struct fence {
+#ifndef VMWGFX_STANDALONE
 	struct kref refcount;
 	const struct fence_ops *ops;
 	struct rcu_head rcu;
+#else
+	struct rcu_head rcu;
+	struct kref refcount;
+	const struct fence_ops *ops;
+#endif	
 	struct list_head cb_list;
 	spinlock_t *lock;
 	u64 context;

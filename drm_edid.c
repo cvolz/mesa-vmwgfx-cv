@@ -27,6 +27,8 @@
  * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
  * DEALINGS IN THE SOFTWARE.
  */
+#ifndef VMWGFX_STANDALONE
+
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/hdmi.h>
@@ -4280,6 +4282,7 @@ drm_hdmi_vendor_infoframe_from_display_mode(struct hdmi_vendor_infoframe *frame,
 }
 EXPORT_SYMBOL(drm_hdmi_vendor_infoframe_from_display_mode);
 
+#ifndef VMWGFX_STANDALONE
 static int drm_parse_tiled_block(struct drm_connector *connector,
 				 struct displayid_block *block)
 {
@@ -4333,6 +4336,7 @@ static int drm_parse_tiled_block(struct drm_connector *connector,
 		drm_mode_put_tile_group(connector->dev, tg);
 	return 0;
 }
+#endif
 
 static int drm_parse_display_id(struct drm_connector *connector,
 				u8 *displayid, int length,
@@ -4360,11 +4364,13 @@ static int drm_parse_display_id(struct drm_connector *connector,
 			      block->tag, block->rev, block->num_bytes);
 
 		switch (block->tag) {
+#ifndef VMWGFX_STANDALONE
 		case DATA_BLOCK_TILED_DISPLAY:
 			ret = drm_parse_tiled_block(connector, block);
 			if (ret)
 				return ret;
 			break;
+#endif
 		case DATA_BLOCK_TYPE_1_DETAILED_TIMING:
 			/* handled in mode gathering code. */
 			break;
@@ -4401,3 +4407,4 @@ out_drop_ref:
 	}
 	return;
 }
+#endif

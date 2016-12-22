@@ -18,6 +18,8 @@
 #ifndef _VMWGFX_COMPAT_H_
 #define _VMWGFX_COMPAT_H_
 
+#include "common_compat.h"
+
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/highmem.h>
@@ -29,25 +31,11 @@
 #include <linux/fb.h>
 #endif
 #include <linux/scatterlist.h>
+#include <linux/time.h>
 
-/*
- * For non-RHEL distros, set major and minor to 0
- */
-#ifndef RHEL_RELEASE_VERSION
-#define RHEL_RELEASE_VERSION(a, b) (((a) << 8) + (b))
-#define RHEL_MAJOR 0
-#define RHEL_MINOR 0
-#endif
-
-#define RHEL_VERSION_CODE RHEL_RELEASE_VERSION(RHEL_MAJOR, RHEL_MINOR)
-
-#undef EXPORT_SYMBOL
-#define EXPORT_SYMBOL(_sym)
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
-#define drm_get_pci_dev(_pdev, _ent, _driver) \
-	drm_get_dev(_pdev, _ent, _driver);
-#endif
+#include "drm_cache.h"
+#include "ttm/ttm_page_alloc.h"
+#include "ttm/ttm_object.h"
 
 extern int ttm_init(void);
 extern void ttm_exit(void);
@@ -324,36 +312,6 @@ static inline int vmwgfx_kref_sub(struct kref *kref, unsigned int count,
 #define VM_DONTDUMP VM_RESERVED
 #endif
 
-
-/*
- * This function was at the beginning not available in
- * older kernels, unfortunately it was backported as a security
- * fix and as such was applied to a multitude of older kernels.
- * There is no reliable way of detecting if the kernel have the
- * fix or not, so we just uncoditionally do this workaround.
- */
-#include "linux/kref.h"
-#define kref_get_unless_zero vmwgfx_standalone_kref_get_unless_zero
-
-static inline int __must_check kref_get_unless_zero(struct kref *kref)
-{
-	return atomic_add_unless(&kref->refcount, 1, 0);
-}
-
-/**
- * kfree_rcu appears as a macro in v2.6.39.
- * This version assumes (and checks) that the struct rcu_head is the
- * first member in the structure about to be freed, so that we can just
- * call kfree directly on the rcu_head member.
- */
-#ifndef kfree_rcu
-#define kfree_rcu(_obj, _rcu_head)					\
-	do {								\
-		BUG_ON(offsetof(typeof(*(_obj)), _rcu_head) != 0);	\
-		call_rcu(&(_obj)->_rcu_head, (void *)kfree);		\
-	} while (0)
-#endif
-
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 3, 0) && \
      RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 5))
 #ifdef CONFIG_SWIOTLB
@@ -422,7 +380,7 @@ static inline dma_addr_t sg_page_iter_dma_address(struct sg_page_iter *piter)
  */
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0))
 #ifndef __DMA_BUF_H__
-#define __DMA_BUF_H_
+#define __DMA_BUF_H__
 #define DMA_BUF_STANDALONE
 
 #include <linux/dma-mapping.h>
@@ -508,17 +466,6 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 	iounmap((void __iomem *) _addr)
 #endif
 
-/* lockdep_assert_held_once appeared in 3.18 */
-#ifndef lockdep_assert_held_once
-#ifdef CONFIG_LOCKDEP
-#define lockdep_assert_held_once (l) do {				\
-		WARN_ON_ONCE(debug_locks && !lockdep_is_held(l));	\
-	} while (0)
-#else
-#define lockdep_assert_held_once(l)             do { (void)(l); } while (0)
-#endif /* !LOCKDEP */
-#endif /* !lockdep_assert_held_once */
-
 /*
  * pfn_t was introduced in 4.5, and also the pfn flag PFN_DEV
  */
@@ -549,16 +496,35 @@ __get_user_pages_unlocked(struct task_struct *tsk, struct mm_struct *mm,
 }
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 4, 0))
-#define kmalloc_array(_n, _size, _gfp)		\
-  kmalloc((_n) * (_size), _gfp)
+#define drm_clflush_pages(_a, _b)					\
+	WARN_ONCE(true, "drm_clflush_pages() illegal call.\n")
+
+/* Never take the FAULT_FLAG_RETRY_NOWAIT path if it's not supported. */
+#ifndef FAULT_FLAG_RETRY_NOWAIT
+#define FAULT_FLAG_RETRY_NOWAIT 0
+#endif
+#ifndef FAULT_FLAG_ALLOW_RETRY
+#define FAULT_FLAG_ALLOW_RETRY 0
+#define VM_FAULT_RETRY ({ BUG(); 0;})
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37))
-#define vzalloc(_size)					     \
-  ({ void *tmp = vmalloc(_size);			     \
-    memset(tmp, 0, _size);				     \
-    tmp;})
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
+#define file_inode(_f) (_f)->f_path.dentry->d_inode
 #endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0))
+static inline u64 ktime_get_raw_ns(void)
+{
+	struct timespec ts;
+	
+	getrawmonotonic(&ts);
+	return timespec_to_ns(&ts);
+}
+#endif
+
+#define ttm_dma_page_alloc_init(_a, _b) {}
+#define ttm_dma_page_alloc_fini() {}
+#define ttm_dma_populate(_a, _b) ({-EINVAL;})
+#define ttm_dma_unpopulate(_a, _b) {}
 
 #endif

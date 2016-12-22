@@ -62,6 +62,7 @@ static struct idr drm_minors_idr;
 
 static struct dentry *drm_debugfs_root;
 
+#ifndef VMWGFX_COMPAT_NO_VAF
 void drm_err(const char *format, ...)
 {
 	struct va_format vaf;
@@ -93,6 +94,7 @@ void drm_ut_debug_printk(const char *function_name, const char *format, ...)
 	va_end(args);
 }
 EXPORT_SYMBOL(drm_ut_debug_printk);
+#endif
 
 struct drm_master *drm_master_create(struct drm_minor *minor)
 {
@@ -126,7 +128,9 @@ static void drm_master_destroy(struct kref *kref)
 	if (dev->driver->master_destroy)
 		dev->driver->master_destroy(dev, master);
 
+#ifndef VMWGFX_STANDALONE
 	drm_legacy_master_rmmaps(dev, master);
+#endif
 
 	idr_destroy(&master->magic_map);
 	kfree(master->unique);
@@ -237,6 +241,7 @@ static int drm_minor_alloc(struct drm_device *dev, unsigned int type)
 	int r;
 	int base = 0;
 
+	DRM_INFO("Allocing minor.\n");
 	minor = kzalloc(sizeof(*minor), GFP_KERNEL);
 	if (!minor)
 		return -ENOMEM;
@@ -507,6 +512,8 @@ EXPORT_SYMBOL(drm_unplug_dev);
  * iput(), but this way you'd end up with a new vfsmount for each inode.
  */
 
+#ifndef VMWGFX_STANDALONE
+
 static int drm_fs_cnt;
 static struct vfsmount *drm_fs_mnt;
 
@@ -563,6 +570,8 @@ static void drm_fs_inode_free(struct inode *inode)
 		simple_release_fs(&drm_fs_mnt, &drm_fs_cnt);
 	}
 }
+
+#endif
 
 /**
  * drm_dev_alloc - Allocate new DRM device
@@ -634,6 +643,8 @@ struct drm_device *drm_dev_alloc(struct drm_driver *driver,
 	 * which is something special to vmwgfx.
 	 */
 	minor = *drm_minor_get_slot(dev, DRM_MINOR_LEGACY);
+
+#ifndef VMWGFX_STANDALONE
 	dev->anon_inode = drm_fs_inode_new(minor->kdev->class);
 
 	if (IS_ERR(dev->anon_inode)) {
@@ -641,7 +652,7 @@ struct drm_device *drm_dev_alloc(struct drm_driver *driver,
 		DRM_ERROR("Cannot allocate anonymous inode: %d\n", ret);
 		goto err_minors;
 	}
-
+#endif
 
 	if (drm_ht_create(&dev->map_hash, 12))
 		goto err_minors;
@@ -663,7 +674,11 @@ err_minors:
 	drm_minor_free(dev, DRM_MINOR_LEGACY);
 	drm_minor_free(dev, DRM_MINOR_RENDER);
 	drm_minor_free(dev, DRM_MINOR_CONTROL);
+
+#ifndef VMWGFX_STANDALONE
 	drm_fs_inode_free(dev->anon_inode);
+#endif
+
 	mutex_destroy(&dev->master_mutex);
 	kfree(dev);
 	return NULL;
@@ -676,8 +691,13 @@ static void drm_dev_release(struct kref *ref)
 
 	drm_legacy_ctxbitmap_cleanup(dev);
 	drm_ht_remove(&dev->map_hash);
-	drm_fs_inode_free(dev->anon_inode);
 
+#ifndef VMWGFX_STANDALONE
+	drm_fs_inode_free(dev->anon_inode);
+#else
+	if (dev->anon_inode)
+		iput(dev->anon_inode);
+#endif
 	drm_minor_free(dev, DRM_MINOR_LEGACY);
 	drm_minor_free(dev, DRM_MINOR_RENDER);
 	drm_minor_free(dev, DRM_MINOR_CONTROL);
@@ -790,20 +810,27 @@ EXPORT_SYMBOL(drm_dev_register);
  */
 void drm_dev_unregister(struct drm_device *dev)
 {
+
+#ifndef VMWGFX_STANDALONE
 	struct drm_map_list *r_list, *list_temp;
+#endif
 
 	drm_lastclose(dev);
 
 	if (dev->driver->unload)
 		dev->driver->unload(dev);
 
+#ifndef VMWGFX_STANDALONE
 	if (dev->agp)
 		drm_pci_agp_destroy(dev);
+#endif
 
 	drm_vblank_cleanup(dev);
 
+#ifndef VMWGFX_STANDALONE
 	list_for_each_entry_safe(r_list, list_temp, &dev->maplist, head)
 		drm_legacy_rmmap(dev, r_list->map);
+#endif
 
 	drm_minor_unregister(dev, DRM_MINOR_LEGACY);
 	drm_minor_unregister(dev, DRM_MINOR_RENDER);

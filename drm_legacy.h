@@ -47,6 +47,7 @@ void drm_legacy_ctxbitmap_cleanup(struct drm_device *dev);
 void drm_legacy_ctxbitmap_free(struct drm_device *dev, int ctx_handle);
 void drm_legacy_ctxbitmap_flush(struct drm_device *dev, struct drm_file *file);
 
+#ifndef VMWGFX_STANDALONE
 int drm_legacy_resctx(struct drm_device *d, void *v, struct drm_file *f);
 int drm_legacy_addctx(struct drm_device *d, void *v, struct drm_file *f);
 int drm_legacy_getctx(struct drm_device *d, void *v, struct drm_file *f);
@@ -56,6 +57,7 @@ int drm_legacy_rmctx(struct drm_device *d, void *v, struct drm_file *f);
 
 int drm_legacy_setsareactx(struct drm_device *d, void *v, struct drm_file *f);
 int drm_legacy_getsareactx(struct drm_device *d, void *v, struct drm_file *f);
+#endif
 
 /*
  * Generic Buffer Management
@@ -63,6 +65,7 @@ int drm_legacy_getsareactx(struct drm_device *d, void *v, struct drm_file *f);
 
 #define DRM_MAP_HASH_OFFSET 0x10000000
 
+#ifndef VMWGFX_STANDALONE
 int drm_legacy_getmap_ioctl(struct drm_device *dev, void *data,
 			    struct drm_file *file_priv);
 int drm_legacy_addmap_ioctl(struct drm_device *d, void *v, struct drm_file *f);
@@ -75,6 +78,8 @@ int drm_legacy_mapbufs(struct drm_device *d, void *v, struct drm_file *f);
 int drm_legacy_dma_ioctl(struct drm_device *d, void *v, struct drm_file *f);
 
 void drm_legacy_vma_flush(struct drm_device *d);
+#endif
+
 
 /*
  * AGP Support

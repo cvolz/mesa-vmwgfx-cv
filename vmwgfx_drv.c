@@ -779,10 +779,12 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		goto out_err0;
 
 
+	DRM_INFO("Stage 0\n");
 	vmw_master_init(&dev_priv->fbdev_master);
 	ttm_lock_set_kill(&dev_priv->fbdev_master.lock, false, SIGTERM);
 	dev_priv->active_master = &dev_priv->fbdev_master;
 
+	DRM_INFO("Stage 1\n");
 	dev_priv->mmio_virt = memremap(dev_priv->mmio_start,
 				       dev_priv->mmio_size, MEMREMAP_WB);
 
@@ -792,6 +794,7 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		goto out_err3;
 	}
 
+	DRM_INFO("Stage 2\n");
 	/* Need mmio memory to check for fifo pitchlock cap. */
 	if (!(dev_priv->capabilities & SVGA_CAP_DISPLAY_TOPOLOGY) &&
 	    !(dev_priv->capabilities & SVGA_CAP_PITCHLOCK) &&
@@ -812,6 +815,7 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 
 	dev->dev_private = dev_priv;
 
+	DRM_INFO("Stage 3\n");
 	ret = pci_request_regions(dev->pdev, "vmwgfx probe");
 	dev_priv->stealth = (ret != 0);
 	if (dev_priv->stealth) {
@@ -851,16 +855,19 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		goto out_no_fman;
 	}
 
+	DRM_INFO("Stage 4\n");
 	ret = ttm_bo_device_init(&dev_priv->bdev,
 				 dev_priv->bo_global_ref.ref.object,
 				 &vmw_bo_driver,
-				 dev->anon_inode->i_mapping,
+				 NULL,
 				 VMWGFX_FILE_PAGE_OFFSET,
 				 false);
 	if (unlikely(ret != 0)) {
 		DRM_ERROR("Failed initializing TTM buffer object driver.\n");
 		goto out_no_bdev;
 	}
+
+	DRM_INFO("Stage 5\n");
 
 	/*
 	 * Enable VRAM, but initially don't use it until SVGA is enabled and
@@ -874,6 +881,8 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 	}
 	dev_priv->bdev.man[TTM_PL_VRAM].use_type = false;
 
+	DRM_INFO("Stage 6\n");
+
 	dev_priv->has_gmr = true;
 	if (((dev_priv->capabilities & (SVGA_CAP_GMR | SVGA_CAP_GMR2)) == 0) ||
 	    refuse_dma || ttm_bo_init_mm(&dev_priv->bdev, VMW_PL_GMR,
@@ -882,6 +891,8 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 			 "Graphics memory resources are very limited.\n");
 		dev_priv->has_gmr = false;
 	}
+
+	DRM_INFO("Stage 7\n");
 
 	if (dev_priv->capabilities & SVGA_CAP_GBOBJECTS) {
 		dev_priv->has_mob = true;
@@ -893,6 +904,8 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		}
 	}
 
+	DRM_INFO("Stage 8\n");
+
 	if (dev_priv->has_mob) {
 		spin_lock(&dev_priv->cap_lock);
 		vmw_write(dev_priv, SVGA_REG_DEV_CAP, SVGA3D_DEVCAP_DX);
@@ -900,15 +913,20 @@ static int vmw_driver_load(struct drm_device *dev, unsigned long chipset)
 		spin_unlock(&dev_priv->cap_lock);
 	}
 
+	DRM_INFO("Stage 9\n");
 
 	ret = vmw_kms_init(dev_priv);
 	if (unlikely(ret != 0))
 		goto out_no_kms;
 	vmw_overlay_init(dev_priv);
 
+	DRM_INFO("Stage 10\n");
+
 	ret = vmw_request_device(dev_priv);
 	if (ret)
 		goto out_no_fifo;
+
+	DRM_INFO("Stage 11\n");
 
 	DRM_INFO("DX: %s\n", dev_priv->has_dx ? "yes." : "no.");
 
@@ -1047,6 +1065,9 @@ static int vmw_driver_open(struct drm_device *dev, struct drm_file *file_priv)
 	struct vmw_private *dev_priv = vmw_priv(dev);
 	struct vmw_fpriv *vmw_fp;
 	int ret = -ENOMEM;
+
+	if (dev_priv->bdev.dev_mapping == NULL)
+	    dev_priv->bdev.dev_mapping = dev->anon_inode->i_mapping;
 
 	vmw_fp = kzalloc(sizeof(*vmw_fp), GFP_KERNEL);
 	if (unlikely(!vmw_fp))

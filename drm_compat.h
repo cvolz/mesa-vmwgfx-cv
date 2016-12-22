@@ -34,384 +34,18 @@
 #ifndef _DRM_COMPAT_H_
 #define _DRM_COMPAT_H_
 
+#include "common_compat.h"
+
 #include <linux/version.h>
-#include <linux/list.h>
-#include <linux/sched.h>
+#include <linux/rculist.h>
 #include <linux/module.h>
+#include <linux/interrupt.h>
+#include <linux/kgdb.h>
+#include <linux/idr.h>
+#include <linux/mm.h>
+#include <linux/device.h>
 
 #include <asm/pgalloc.h>
-
-/*
- * For non-RHEL distros, set major and minor to 0
- */
-#ifndef RHEL_RELEASE_VERSION
-#define RHEL_RELEASE_VERSION(a, b) (((a) << 8) + (b))
-#define RHEL_MAJOR 0
-#define RHEL_MINOR 0
-#endif
-
-#define RHEL_VERSION_CODE RHEL_RELEASE_VERSION(RHEL_MAJOR, RHEL_MINOR)
-
-#ifndef minor
-#define minor(x) MINOR((x))
-#endif
-
-#ifndef MODULE_LICENSE
-#define MODULE_LICENSE(x)
-#endif
-
-#ifndef preempt_disable
-#define preempt_disable()
-#define preempt_enable()
-#endif
-
-#ifndef pte_offset_map
-#define pte_offset_map pte_offset
-#define pte_unmap(pte)
-#endif
-
-#ifndef module_param
-#define module_param(name, type, perm)
-#endif
-
-/* older kernels had different irq args */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19))
-#undef DRM_IRQ_ARGS
-#define DRM_IRQ_ARGS		int irq, void *arg, struct pt_regs *regs
-#endif
-
-#ifndef list_for_each_safe
-#define list_for_each_safe(pos, n, head)				\
-	for (pos = (head)->next, n = pos->next; pos != (head);		\
-		pos = n, n = pos->next)
-#endif
-
-#ifndef list_for_each_entry
-#define list_for_each_entry(pos, head, member)				\
-       for (pos = list_entry((head)->next, typeof(*pos), member),	\
-                    prefetch(pos->member.next);				\
-            &pos->member != (head);					\
-            pos = list_entry(pos->member.next, typeof(*pos), member),	\
-                    prefetch(pos->member.next))
-#endif
-
-#ifndef list_for_each_entry_safe
-#define list_for_each_entry_safe(pos, n, head, member)                  \
-        for (pos = list_entry((head)->next, typeof(*pos), member),      \
-                n = list_entry(pos->member.next, typeof(*pos), member); \
-             &pos->member != (head);                                    \
-             pos = n, n = list_entry(n->member.next, typeof(*n), member))
-#endif
-
-#ifndef __user
-#define __user
-#endif
-
-#if !defined(__put_page)
-#define __put_page(p)           atomic_dec(&(p)->count)
-#endif
-
-#if !defined(__GFP_COMP)
-#define __GFP_COMP 0
-#endif
-
-#if !defined(IRQF_SHARED)
-#define IRQF_SHARED SA_SHIRQ
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,10)
-static inline int remap_pfn_range(struct vm_area_struct *vma, unsigned long from, unsigned long pfn, unsigned long size, pgprot_t pgprot)
-{
-  return remap_page_range(vma, from,
-			  pfn << PAGE_SHIFT,
-			  size,
-			  pgprot);
-}
-
-static __inline__ void *kcalloc(size_t nmemb, size_t size, int flags)
-{
-	void *addr;
-
-	addr = kmalloc(size * nmemb, flags);
-	if (addr != NULL)
-		memset((void *)addr, 0, size * nmemb);
-
-	return addr;
-}
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,16)
-#define mutex_lock down
-#define mutex_unlock up
-
-#define mutex semaphore
-
-#define mutex_init(a) sema_init((a), 1)
-
-#endif
-
-#ifndef DEFINE_SPINLOCK
-#define DEFINE_SPINLOCK(x) spinlock_t x = SPIN_LOCK_UNLOCKED
-#endif
-
-/* old architectures */
-#ifdef __AMD64__
-#define __x86_64__
-#endif
-
-/* sysfs __ATTR macro */
-#ifndef __ATTR
-#define __ATTR(_name,_mode,_show,_store) { \
-        .attr = {.name = __stringify(_name), .mode = _mode, .owner = THIS_MODULE },     \
-        .show   = _show,                                        \
-        .store  = _store,                                       \
-}
-#endif
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18)
-#define vmalloc_user(_size) ({void * tmp = vmalloc(_size);   \
-      if (tmp) memset(tmp, 0, size);			     \
-      (tmp);})
-#endif
-
-#ifndef list_for_each_entry_safe_reverse
-#define list_for_each_entry_safe_reverse(pos, n, head, member)          \
-        for (pos = list_entry((head)->prev, typeof(*pos), member),      \
-                n = list_entry(pos->member.prev, typeof(*pos), member); \
-             &pos->member != (head);                                    \
-             pos = n, n = list_entry(n->member.prev, typeof(*n), member))
-#endif
-
-#include <linux/mm.h>
-#include <asm/page.h>
-
-#if ((LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)) && \
-     (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,15)))
-#define DRM_ODD_MM_COMPAT
-#endif
-
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,21))
-#define DRM_FULL_MM_COMPAT
-#endif
-
-
-/*
- * Flush relevant caches and clear a VMA structure so that page references
- * will cause a page fault. Don't flush tlbs.
- */
-
-extern void drm_clear_vma(struct vm_area_struct *vma,
-			  unsigned long addr, unsigned long end);
-
-/*
- * Return the PTE protection map entries for the VMA flags given by
- * flags. This is a functional interface to the kernel's protection map.
- */
-
-extern pgprot_t vm_get_page_prot(unsigned long vm_flags);
-
-#ifndef GFP_DMA32
-#define GFP_DMA32 GFP_KERNEL
-#endif
-#ifndef __GFP_DMA32
-#define __GFP_DMA32 GFP_KERNEL
-#endif
-
-#if defined(CONFIG_X86) && (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15))
-
-/*
- * These are too slow in earlier kernels.
- */
-
-extern int drm_unmap_page_from_agp(struct page *page);
-extern int drm_map_page_into_agp(struct page *page);
-
-#define map_page_into_agp drm_map_page_into_agp
-#define unmap_page_from_agp drm_unmap_page_from_agp
-#endif
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,15))
-extern struct page *get_nopage_retry(void);
-extern void free_nopage_retry(void);
-
-#define NOPAGE_REFAULT get_nopage_retry()
-#endif
-
-
-#ifndef DRM_FULL_MM_COMPAT
-
-/*
- * For now, just return a dummy page that we've allocated out of
- * static space. The page will be put by do_nopage() since we've already
- * filled out the pte.
- */
-
-struct fault_data {
-	struct vm_area_struct *vma;
-	unsigned long address;
-	pgoff_t pgoff;
-	unsigned int flags;
-
-	int type;
-};
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19))
-extern struct page *drm_bo_vm_nopage(struct vm_area_struct *vma,
-				     unsigned long address,
-				     int *type);
-#elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,19)) && \
-  !defined(DRM_FULL_MM_COMPAT)
-extern unsigned long drm_bo_vm_nopfn(struct vm_area_struct *vma,
-				     unsigned long address);
-#endif /* (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19)) */
-#endif /* ndef DRM_FULL_MM_COMPAT */
-
-#ifdef DRM_ODD_MM_COMPAT
-
-struct drm_buffer_object;
-
-
-/*
- * Add a vma to the ttm vma list, and the
- * process mm pointer to the ttm mm list. Needs the ttm mutex.
- */
-
-extern int drm_bo_add_vma(struct drm_buffer_object * bo,
-			   struct vm_area_struct *vma);
-/*
- * Delete a vma and the corresponding mm pointer from the
- * ttm lists. Needs the ttm mutex.
- */
-extern void drm_bo_delete_vma(struct drm_buffer_object * bo,
-			      struct vm_area_struct *vma);
-
-/*
- * Attempts to lock all relevant mmap_sems for a ttm, while
- * not releasing the ttm mutex. May return -EAGAIN to avoid
- * deadlocks. In that case the caller shall release the ttm mutex,
- * schedule() and try again.
- */
-
-extern int drm_bo_lock_kmm(struct drm_buffer_object * bo);
-
-/*
- * Unlock all relevant mmap_sems for a ttm.
- */
-extern void drm_bo_unlock_kmm(struct drm_buffer_object * bo);
-
-/*
- * If the ttm was bound to the aperture, this function shall be called
- * with all relevant mmap sems held. It deletes the flag VM_PFNMAP from all
- * vmas mapping this ttm. This is needed just after unmapping the ptes of
- * the vma, otherwise the do_nopage() function will bug :(. The function
- * releases the mmap_sems for this ttm.
- */
-
-extern void drm_bo_finish_unmap(struct drm_buffer_object *bo);
-
-/*
- * Remap all vmas of this ttm using io_remap_pfn_range. We cannot
- * fault these pfns in, because the first one will set the vma VM_PFNMAP
- * flag, which will make the next fault bug in do_nopage(). The function
- * releases the mmap_sems for this ttm.
- */
-
-extern int drm_bo_remap_bound(struct drm_buffer_object *bo);
-
-
-/*
- * Remap a vma for a bound ttm. Call with the ttm mutex held and
- * the relevant mmap_sem locked.
- */
-extern int drm_bo_map_bound(struct vm_area_struct *vma);
-
-#endif
-
-/* fixme when functions are upstreamed - upstreamed for 2.6.23 */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,23))
-#define DRM_IDR_COMPAT_FN
-#define DRM_NO_FAULT
-extern unsigned long drm_bo_vm_nopfn(struct vm_area_struct *vma,
-				     unsigned long address);
-#endif
-#ifdef DRM_IDR_COMPAT_FN
-int idr_for_each(struct idr *idp,
-		 int (*fn)(int id, void *p, void *data), void *data);
-void idr_remove_all(struct idr *idp);
-#endif
-
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,18))
-void *idr_replace(struct idr *idp, void *ptr, int id);
-#endif
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,19))
-typedef _Bool                   bool;
-#endif
-
-
-#if !defined(flush_agp_mappings)
-#define flush_agp_mappings() do {} while(0)
-#endif
-
-#ifndef DMA_BIT_MASK
-#define DMA_BIT_MASK(n) (((n) == 64) ? ~0ULL : (1ULL<<(n)) - 1)
-#endif
-
-#ifndef VM_CAN_NONLINEAR
-#define DRM_VM_NOPAGE 1
-#endif
-
-#ifdef DRM_VM_NOPAGE
-
-extern struct page *drm_vm_nopage(struct vm_area_struct *vma,
-				  unsigned long address, int *type);
-
-extern struct page *drm_vm_shm_nopage(struct vm_area_struct *vma,
-				      unsigned long address, int *type);
-
-extern struct page *drm_vm_dma_nopage(struct vm_area_struct *vma,
-				      unsigned long address, int *type);
-
-extern struct page *drm_vm_sg_nopage(struct vm_area_struct *vma,
-				     unsigned long address, int *type);
-#endif
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,26))
-#define drm_core_ioremap_wc drm_core_ioremap
-#endif
-
-#ifndef OS_HAS_GEM
-#if (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,27))
-#define OS_HAS_GEM 1
-#else
-#define OS_HAS_GEM 0
-#endif
-#endif
-
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2,6,27))
-#define set_page_locked SetPageLocked
-#elif (LINUX_VERSION_CODE > KERNEL_VERSION(2,6,27))
-/*
- * The kernel provides __set_page_locked, which uses the non-atomic
- * __set_bit function. Let's use the atomic set_bit just in case.
- */
-static inline void set_page_locked(struct page *page)
-{
-	set_bit(PG_locked, &page->flags);
-}
-#endif
-
-#ifndef current_euid
-#define current_euid() current->euid;
-#endif
-
-#ifndef abs64
-#define abs64(x) ({				\
-		s64 __x = (x);			\
-		(__x < 0) ? -__x : __x;		\
-	})
-#endif
 
 /**
  * VM_RESERVED disappeared in 3.7, and is replaced in upstream
@@ -428,12 +62,6 @@ static inline void set_page_locked(struct page *page)
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0))
 #define kuid_t uid_t
 #define from_kuid_munged(_a, _uid) (_uid)
-#endif
-
-/* hlist_add_after_rcu disappeared in linux 3.17 */
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 17, 0))
-#define hlist_add_after_rcu(__parent, __item) \
-	hlist_add_behind_rcu(__item, __parent)
 #endif
 
 /* set_mb__[before|after]_atomic appeared in 3.16 */
@@ -482,6 +110,133 @@ static inline void set_page_locked(struct page *page)
 /* wake_up_state is not exported, but wake_up_process is. */
 #define wake_up_state(_p, _s)			\
 	({BUILD_BUG_ON(_s != TASK_NORMAL);	\
-		wake_up_process(_p); })
+	  wake_up_process(_p); })
+
+#ifndef in_dbg_master
+#ifdef CONFIG_KGDB
+#define in_dbg_master() \
+	(raw_smp_processor_id() == atomic_read(&kgdb_active))
+#else
+#define in_dbg_master() (0)
+#endif
+#endif
+
+#ifndef replace_fops
+#define replace_fops(f, fops) \
+        do {				    \
+		struct file *__file = (f);	   \
+		fops_put(__file->f_op);		   \
+		BUG_ON(!(__file->f_op = (fops)));  \
+	} while(0)
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
+#define idr_preload(__gfp)					\
+	{							\
+	struct idr *__idr = NULL;				\
+	int __ret;						\
+	do {							\
+	__ret = 0;						\
+	if (__idr && idr_pre_get(__idr, __gfp) == 0) {		\
+		__ret = -ENOMEM;				\
+	}
+
+#define idr_preload_end()			\
+	} while(__ret == -EAGAIN);		\
+	}
+
+#define idr_alloc(__idp, __ptr, __start, __end, __agfp)			\
+	({								\
+		int __id;						\
+		__idr = __idp;						\
+		if (!__ret)						\
+			__ret = idr_get_new_above(__idp, __ptr, __start, &__id); \
+		if (__ret == 0 && __end != 0 && __id >= __end) {	\
+			__ret = -ENOSPC; idr_remove(__idp, __id);	\
+		}							\
+		(__ret < 0) ? __ret : __id;				\
+	})
+
+#define VMWGFX_STANDALONE_IDR_PRELOAD(__gfp) idr_preload(__gfp)
+#define VMWGFX_STANDALONE_IDR_PRELOAD_END() idr_preload_end()
+#else
+#define VMWGFX_STANDALONE_IDR_PRELOAD(__gfp)
+#define VMWGFX_STANDALONE_IDR_PRELOAD_END()
+#endif
+
+#ifndef DIR_ROUND_CLOSEST_ULL
+#define DIV_ROUND_CLOSEST_ULL(x, divisor)(				\
+		{							\
+			typeof(divisor) __d = divisor;			\
+			unsigned long long _tmp = (x) + (__d) / 2;      \
+			do_div(_tmp, __d);                              \
+			_tmp;                                           \
+		}                                                       \
+		)
+#endif
+
+#define __ATTR_RW(_name) __ATTR(_name, (S_IWUSR | S_IRUGO),	\
+				_name##_show, _name##_store)
+#define DEVICE_ATTR_RW(_name)						\
+	struct device_attribute dev_attr_##_name = __ATTR_RW(_name)
+#define DEVICE_ATTR_RO(_name)						\
+	struct device_attribute dev_attr_##_name = __ATTR_RO(_name)
+
+#ifndef kobj_to_dev
+#define kobj_to_dev kobj_to_dev_drm
+static inline struct device *kobj_to_dev(struct kobject *kobj)
+{
+	return container_of(kobj, struct device, kobj);
+}
+#endif
+
+#ifndef hlist_next_rcu
+#define hlist_next_rcu(node)    (*((struct hlist_node __rcu **)(&(node)->next)))
+#endif
+
+#ifndef hlist_add_behind_rcu
+#define hlist_add_behind_rcu hlist_add_behind_rcu_drm
+static inline void hlist_add_behind_rcu(struct hlist_node *n,
+                                         struct hlist_node *prev)
+{
+         n->next = prev->next;
+         n->pprev = &prev->next;
+         rcu_assign_pointer(hlist_next_rcu(prev), n);
+         if (n->next)
+                 n->next->pprev = &n->next;
+}
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
+enum hdmi_picture_aspect {
+	HDMI_PICTURE_ASPECT_NONE,
+	HDMI_PICTURE_ASPECT_4_3,
+	HDMI_PICTURE_ASPECT_16_9,
+};
+#else
+#include <linux/hdmi.h>
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0)) &&	\
+	(RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 5))
+static inline int ida_simple_get(struct ida *ida, unsigned int start,
+				 unsigned int end, gfp_t gfp_mask)
+{
+	int ret, id;
+
+	do {
+		if (ida_pre_get(ida, gfp_mask) == 0)
+			return -ENOMEM;
+
+		ret = ida_get_new_above(ida, start, &id);
+		if (ret == 0 && end != 0 && id >= end) {
+			ida_remove(ida, id);
+			return -ENOSPC;
+		}
+	} while (ret == -EAGAIN);
+
+	return (ret == 0) ? id : ret;
+}
+#endif
 
 #endif

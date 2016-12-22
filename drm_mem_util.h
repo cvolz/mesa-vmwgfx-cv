@@ -29,6 +29,10 @@
 
 #include <linux/vmalloc.h>
 
+#ifdef VMWGFX_STANDALONE
+#include "common_compat.h"
+#endif
+
 static __inline__ void *drm_calloc_large(size_t nmemb, size_t size)
 {
 	if (size != 0 && nmemb > SIZE_MAX / size)

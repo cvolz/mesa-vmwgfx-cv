@@ -125,6 +125,7 @@ int drm_open(struct inode *inode, struct file *filp)
 	struct drm_minor *minor;
 	int retcode;
 	int need_setup = 0;
+	static DEFINE_SPINLOCK(anon_lock);
 
 	minor = drm_minor_acquire(iminor(inode));
 	if (IS_ERR(minor))
@@ -133,6 +134,13 @@ int drm_open(struct inode *inode, struct file *filp)
 	dev = minor->dev;
 	if (!dev->open_count++)
 		need_setup = 1;
+
+	spin_lock(&anon_lock);
+	if (!dev->anon_inode) {
+		ihold(inode);
+		dev->anon_inode = inode;
+	}
+	spin_unlock(&anon_lock);
 
 	/* share address_space across all char-devs of a single device */
 	filp->f_mapping = dev->anon_inode->i_mapping;
@@ -381,10 +389,14 @@ static void drm_legacy_dev_reinit(struct drm_device *dev)
 
 	mutex_lock(&dev->struct_mutex);
 
+#ifndef VMWGFX_STANDALONE
 	drm_legacy_agp_clear(dev);
 
 	drm_legacy_sg_cleanup(dev);
+
 	drm_legacy_vma_flush(dev);
+#endif
+
 	drm_legacy_dma_takedown(dev);
 
 	mutex_unlock(&dev->struct_mutex);

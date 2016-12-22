@@ -36,6 +36,8 @@
 #include "drmP.h"
 #include "drm_legacy.h"
 
+#ifndef VMWGFX_STANDALONE
+
 static struct drm_map_list *drm_find_matching_map(struct drm_device *dev,
 						  struct drm_local_map *map)
 {
@@ -1552,3 +1554,5 @@ struct drm_local_map *drm_legacy_getsarea(struct drm_device *dev)
 	return NULL;
 }
 EXPORT_SYMBOL(drm_legacy_getsarea);
+
+#endif

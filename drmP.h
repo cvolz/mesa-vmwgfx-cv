@@ -61,10 +61,12 @@
 #include <asm/pgalloc.h>
 #include <asm/uaccess.h>
 
+#include "drm_compat.h"
+
 #include "drm.h"
 #include "drm_mode.h"
 
-#include "drm_agpsupport.h"
+//#include "drm_agpsupport.h"
 #include "drm_crtc.h"
 #include "drm_global.h"
 #include "drm_hashtab.h"
@@ -88,7 +90,6 @@ struct drm_gem_object;
 #ifdef VMWGFX_STANDALONE
 
 #include <linux/version.h>
-#include "drm_compat.h"
 
 #undef EXPORT_SYMBOL
 #define EXPORT_SYMBOL(_dummy)
@@ -150,11 +151,13 @@ struct dma_buf_attachment;
 #define DRM_UT_ATOMIC		0x10
 #define DRM_UT_VBL		0x20
 
+#ifndef VMWGFX_COMPAT_NO_VAF
 extern __printf(2, 3)
 void drm_ut_debug_printk(const char *function_name,
 			 const char *format, ...);
 extern __printf(1, 2)
 void drm_err(const char *format, ...);
+#endif
 
 /***********************************************************************/
 /** \name DRM template customization defaults */
@@ -970,9 +973,11 @@ int drm_invalid_op(struct drm_device *dev, void *data,
 		   struct drm_file *file_priv);
 
 /* Cache management (drm_cache.c) */
+#ifndef VMWGFX_STANDALONE
 void drm_clflush_pages(struct page *pages[], unsigned long num_pages);
 void drm_clflush_sg(struct sg_table *st);
 void drm_clflush_virt_range(void *addr, unsigned long length);
+#endif
 
 /*
  * These are exported to drivers so that they can implement fencing using

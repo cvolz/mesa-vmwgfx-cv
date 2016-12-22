@@ -28,8 +28,10 @@
  * Authors: Thomas Hellström <thomas-at-tungstengraphics-dot-com>
  */
 
-#include "drmP.h"
-#include "vmwgfx_compat.h"
+#ifndef VMWGFX_STANDALONE
+
+#include <linux/export.h>
+#include <drm/drmP.h>
 
 #if defined(CONFIG_X86)
 #include <asm/smp.h>
@@ -49,18 +51,10 @@ drm_clflush_page(struct page *page)
 	if (unlikely(page == NULL))
 		return;
 
-#ifdef VMW_HAS_STACK_KMAP_ATOMIC
 	page_virtual = kmap_atomic(page);
-#else
-	page_virtual = kmap_atomic(page, KM_USER0);
-#endif
 	for (i = 0; i < PAGE_SIZE; i += size)
 		clflushopt(page_virtual + i);
-#ifdef VMW_HAS_STACK_KMAP_ATOMIC
 	kunmap_atomic(page_virtual);
-#else
-	kunmap_atomic(page_virtual, KM_USER0);
-#endif
 }
 
 static void drm_cache_flush_clflush(struct page *pages[],
@@ -73,14 +67,6 @@ static void drm_cache_flush_clflush(struct page *pages[],
 		drm_clflush_page(*pages++);
 	mb();
 }
-
-#ifndef VMWGFX_STANDALONE
-static void
-drm_clflush_ipi_handler(void *null)
-{
-	wbinvd();
-}
-#endif
 #endif
 
 void
@@ -92,13 +78,10 @@ drm_clflush_pages(struct page *pages[], unsigned long num_pages)
 		drm_cache_flush_clflush(pages, num_pages);
 		return;
 	}
-#ifndef VMWGFX_STANDALONE
-	if (on_each_cpu(drm_clflush_ipi_handler, NULL, 1) != 0)
-		printk(KERN_ERR "Timed out waiting for cache flush.\n");
-#else
+
 	if (wbinvd_on_all_cpus())
 		printk(KERN_ERR "Timed out waiting for cache flush.\n");
-#endif
+
 #elif defined(__powerpc__)
 	unsigned long i;
 	for (i = 0; i < num_pages; i++) {
@@ -155,6 +138,7 @@ drm_clflush_virt_range(void *addr, unsigned long length)
 		mb();
 		for (; addr < end; addr += size)
 			clflushopt(addr);
+		clflushopt(end - 1); /* force serialisation */
 		mb();
 		return;
 	}
@@ -167,3 +151,5 @@ drm_clflush_virt_range(void *addr, unsigned long length)
 #endif
 }
 EXPORT_SYMBOL(drm_clflush_virt_range);
+
+#endif

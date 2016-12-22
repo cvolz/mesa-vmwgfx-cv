@@ -30,6 +30,8 @@
 #include "ttm_memory.h"
 
 struct device;
+struct ttm_tt;
+struct ttm_dma_tt;
 
 /**
  * Initialize pool allocator.

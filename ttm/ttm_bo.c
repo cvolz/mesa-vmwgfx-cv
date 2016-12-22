@@ -29,6 +29,7 @@
  */
 
 #define pr_fmt(fmt) "[TTM] " fmt
+#include "vmwgfx_compat.h"
 #include "ttm/ttm_module.h"
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_placement.h"

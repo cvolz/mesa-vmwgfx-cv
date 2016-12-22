@@ -24,6 +24,7 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  **************************************************************************/
+#include "vmwgfx_compat.h"
 
 #include "ttm/ttm_execbuf_util.h"
 #include "ttm/ttm_bo_driver.h"

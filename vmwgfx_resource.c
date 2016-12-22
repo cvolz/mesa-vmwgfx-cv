@@ -180,28 +180,6 @@ void vmw_resource_unreference(struct vmw_resource **p_res)
  * Allocate the lowest free resource from the resource manager, and set
  * @res->id to that id. Returns 0 on success and -ENOMEM on failure.
  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
-int vmw_resource_alloc_id(struct vmw_resource *res)
-{
-	struct vmw_private *dev_priv = res->dev_priv;
-	int ret;
-	struct idr *idr = &dev_priv->res_idr[res->func->res_type];
-
-	BUG_ON(res->id != -1);
-
-	do {
-		if (unlikely(idr_pre_get(idr, GFP_KERNEL) == 0))
-			return -ENOMEM;
-
-		write_lock(&dev_priv->resource_lock);
-		ret = idr_get_new_above(idr, res, 1, &res->id);
-		write_unlock(&dev_priv->resource_lock);
-
-	} while (ret == -EAGAIN);
-
-	return ret;
-}
-#else
 int vmw_resource_alloc_id(struct vmw_resource *res)
 {
 	struct vmw_private *dev_priv = res->dev_priv;
@@ -221,7 +199,6 @@ int vmw_resource_alloc_id(struct vmw_resource *res)
 	idr_preload_end();
 	return ret < 0 ? ret : 0;
 }
-#endif
 
 /**
  * vmw_resource_init - initialize a struct vmw_resource

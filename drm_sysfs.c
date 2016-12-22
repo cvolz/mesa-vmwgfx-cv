@@ -17,6 +17,7 @@
 #include <linux/gfp.h>
 #include <linux/err.h>
 #include <linux/export.h>
+#include <linux/sysfs.h>
 
 #include "drm_sysfs.h"
 #include "drm_core.h"
@@ -117,11 +118,7 @@ static ssize_t enabled_show(struct device *device,
 	return snprintf(buf, PAGE_SIZE, enabled ? "enabled\n" : "disabled\n");
 }
 
-static ssize_t edid_show(
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35) || \
-     RHEL_VERSION_CODE >= RHEL_RELEASE_VERSION(6, 5))
-                         struct file *file,
-#endif
+static ssize_t edid_show(struct file *file,
                          struct kobject *kobj, struct bin_attribute *attr,
 			 char *buf, loff_t off, size_t count)
 {
@@ -153,6 +150,7 @@ unlock:
 
 	return ret;
 }
+
 
 static ssize_t modes_show(struct device *device,
 			   struct device_attribute *attr,
@@ -192,14 +190,18 @@ static struct bin_attribute edid_attr = {
 	.read = edid_show,
 };
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0))
 static struct bin_attribute *connector_bin_attrs[] = {
 	&edid_attr,
 	NULL
 };
+#endif
 
 static const struct attribute_group connector_dev_group = {
 	.attrs = connector_dev_attrs,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 11, 0))
 	.bin_attrs = connector_bin_attrs,
+#endif
 };
 
 static const struct attribute_group *connector_dev_groups[] = {
@@ -255,6 +257,14 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 		goto error;
 	}
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0))
+	retval = sysfs_create_bin_file(&kdev->kobj, &edid_attr);
+	if (retval) {
+		DRM_ERROR("failed to register connector edid attribute.\n");
+		goto out_no_bin_file;
+	}
+#endif
+
 	connector->kdev = kdev;
 
 	DRM_DEBUG("adding \"%s\" to sysfs\n", connector->name);
@@ -264,6 +274,10 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 
 	return retval;
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0))
+out_no_bin_file:
+	drm_class_device_unregister(kdev);
+#endif
 error:
 	kfree(kdev);
 	return retval;
@@ -288,6 +302,10 @@ void drm_sysfs_connector_remove(struct drm_connector *connector)
 		return;
 	DRM_DEBUG("removing \"%s\" from sysfs\n",
 		  connector->name);
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0))
+	sysfs_remove_bin_file(&connector->kdev->kobj, &edid_attr);
+#endif
 
 	/* vwmgfx: We used drm_class_device_register() to register this device */
 	drm_class_device_unregister(connector->kdev);
@@ -372,7 +390,7 @@ struct device *drm_sysfs_minor_alloc(struct drm_minor *minor)
 		goto err_free;
 	}
 
-	(void *) get_device(kdev);
+	(void) get_device(kdev);
 
 	return kdev;
 

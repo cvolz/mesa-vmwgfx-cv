@@ -24,6 +24,7 @@
 #include <linux/err.h>
 #include <linux/module.h>
 
+#include "drm_compat.h"
 #include "drm_crtc.h"
 
 #include "drmP.h"

@@ -26,6 +26,8 @@
  **************************************************************************/
 
 #define pr_fmt(fmt) "[TTM] " fmt
+#include "vmwgfx_compat.h"
+
 #include "ttm/ttm_memory.h"
 #include "ttm/ttm_module.h"
 #include "ttm/ttm_page_alloc.h"

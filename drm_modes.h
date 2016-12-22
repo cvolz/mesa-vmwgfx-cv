@@ -141,6 +141,8 @@ enum drm_mode_status {
 
 #define DRM_MODE_FLAG_3D_MAX	DRM_MODE_FLAG_3D_SIDE_BY_SIDE_HALF
 
+struct videomode;
+
 /**
  * struct drm_display_mode - DRM kernel-internal display mode structure
  * @hdisplay: horizontal display size

@@ -30,12 +30,12 @@
 
 #define pr_fmt(fmt) "[TTM] " fmt
 
+#include "vmwgfx_compat.h"
 #include <ttm/ttm_module.h>
 #include <ttm/ttm_bo_driver.h>
 #include <ttm/ttm_placement.h>
 #include "drm_vma_manager.h"
 #include <linux/mm.h>
-#include "vmwgfx_compat.h"
 #include <linux/rbtree.h>
 #include <linux/module.h>
 #include <linux/uaccess.h>

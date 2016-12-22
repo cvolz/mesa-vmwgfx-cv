@@ -270,7 +270,6 @@ const char *drm_get_format_name(uint32_t format)
 }
 EXPORT_SYMBOL(drm_get_format_name);
 
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3,9,0))
 /*
  * Internal function to assign a slot in the object idr and optionally
  * register the object into the idr.
@@ -284,7 +283,9 @@ static int drm_mode_object_get_reg(struct drm_device *dev,
 	int ret;
 
 	mutex_lock(&dev->mode_config.idr_mutex);
+	VMWGFX_STANDALONE_IDR_PRELOAD(GFP_KERNEL);
 	ret = idr_alloc(&dev->mode_config.crtc_idr, register_obj ? obj : NULL, 1, 0, GFP_KERNEL);
+	VMWGFX_STANDALONE_IDR_PRELOAD_END();
 	if (ret >= 0) {
 		/*
 		 * Set up the object linking under the protection of the idr
@@ -301,37 +302,6 @@ static int drm_mode_object_get_reg(struct drm_device *dev,
 
 	return ret < 0 ? ret : 0;
 }
-#else
-static int drm_mode_object_get_reg(struct drm_device *dev,
-				   struct drm_mode_object *obj,
-				   uint32_t obj_type,
-				   bool register_obj,
-				   void (*obj_free_cb)(struct kref *kref))
-{
-	int new_id = 0;
-	int ret;
-
-again:
-	if (idr_pre_get(&dev->mode_config.crtc_idr, GFP_KERNEL) == 0) {
-		DRM_ERROR("Ran out memory getting a mode number\n");
-		return -EINVAL;
-	}
-
-	mutex_lock(&dev->mode_config.idr_mutex);
-	ret = idr_get_new_above(&dev->mode_config.crtc_idr, obj, 1, &new_id);
-	mutex_unlock(&dev->mode_config.idr_mutex);
-	if (ret == -EAGAIN)
-		goto again;
-
-	obj->id = new_id;
-	obj->type = obj_type;
-	if (obj_free_cb) {
-		obj->free_cb = obj_free_cb;
-		kref_init(&obj->refcount);
-	}
-	return 0;
-}
-#endif
 
 /**
  * drm_mode_object_get - allocate a new modeset identifier
@@ -1016,10 +986,12 @@ void drm_connector_cleanup(struct drm_connector *connector)
 	struct drm_device *dev = connector->dev;
 	struct drm_display_mode *mode, *t;
 
+#ifndef VMWGFX_STANDALONE
 	if (connector->tile_group) {
 		drm_mode_put_tile_group(dev, connector->tile_group);
 		connector->tile_group = NULL;
 	}
+#endif
 
 	list_for_each_entry_safe(mode, t, &connector->probed_modes, head)
 		drm_mode_remove(connector, mode);
@@ -3563,13 +3535,18 @@ int drm_mode_rmfb(struct drm_device *dev,
 	if (drm_framebuffer_read_refcount(fb) > 1) {
 		struct drm_mode_rmfb_work arg;
 
-		INIT_WORK_ONSTACK(&arg.work, drm_mode_rmfb_work_fn);
 		INIT_LIST_HEAD(&arg.fbs);
 		list_add_tail(&fb->filp_head, &arg.fbs);
+
+#ifndef VMWGFX_STANDALONE
+		INIT_WORK_ONSTACK(&arg.work, drm_mode_rmfb_work_fn);
 
 		schedule_work(&arg.work);
 		flush_work(&arg.work);
 		destroy_work_on_stack(&arg.work);
+#else
+		drm_mode_rmfb_work_fn(&arg.work);
+#endif
 	} else
 		drm_framebuffer_unreference(fb);
 
@@ -3762,11 +3739,16 @@ void drm_fb_release(struct drm_file *priv)
 	}
 
 	if (!list_empty(&arg.fbs)) {
+#ifndef VMWGFX_STANDALONE
 		INIT_WORK_ONSTACK(&arg.work, drm_mode_rmfb_work_fn);
 
 		schedule_work(&arg.work);
 		flush_work(&arg.work);
 		destroy_work_on_stack(&arg.work);
+#else
+		drm_mode_rmfb_work_fn(&arg.work);
+#endif
+
 	}
 }
 
@@ -5998,6 +5980,7 @@ struct drm_property *drm_mode_create_rotation_property(struct drm_device *dev,
 }
 EXPORT_SYMBOL(drm_mode_create_rotation_property);
 
+#ifndef VMWGFX_STANDALONE
 /**
  * DOC: Tile group
  *
@@ -6096,3 +6079,4 @@ struct drm_tile_group *drm_mode_create_tile_group(struct drm_device *dev,
 	return tg;
 }
 EXPORT_SYMBOL(drm_mode_create_tile_group);
+#endif
