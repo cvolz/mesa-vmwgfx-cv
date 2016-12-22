@@ -28,6 +28,9 @@
 #include "vmwgfx_kms.h"
 #include "device_include/svga3d_surfacedefs.h"
 #include "drm_plane_helper.h"
+#include "drm_atomic.h"
+#include "drm_atomic_helper.h"
+
 
 #define vmw_crtc_to_stdu(x) \
 	container_of(x, struct vmw_screen_target_display_unit, base.crtc)
@@ -1080,6 +1083,11 @@ static const struct drm_connector_funcs vmw_stdu_connector_funcs = {
 	.fill_modes = vmw_du_connector_fill_modes,
 	.set_property = vmw_du_connector_set_property,
 	.destroy = vmw_stdu_connector_destroy,
+	.reset = vmw_du_connector_reset,
+	.atomic_duplicate_state = vmw_du_connector_duplicate_state,
+	.atomic_destroy_state = vmw_du_connector_destroy_state,
+	.atomic_set_property = vmw_du_connector_atomic_set_property,
+	.atomic_get_property = vmw_du_connector_atomic_get_property,
 };
 
 
@@ -1176,6 +1184,8 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 		goto err_free;
 	}
 
+	vmw_du_connector_reset(connector);
+
 	ret = drm_connector_init(dev, connector, &vmw_stdu_connector_funcs,
 				 DRM_MODE_CONNECTOR_VIRTUAL);
 	if (ret) {
@@ -1183,6 +1193,7 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 		goto err_free;
 	}
 	connector->status = vmw_du_connector_detect(connector, false);
+	vmw_connector_state_to_vcs(connector->state)->is_implicit = false;
 
 	ret = drm_encoder_init(dev, encoder, &vmw_stdu_encoder_funcs,
 			       DRM_MODE_ENCODER_VIRTUAL, NULL);
@@ -1201,8 +1212,7 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 		goto err_free_encoder;
 	}
 
-	/* FIXME: Turn on after plane/connector states are implemented. */
-	/* vmw_du_crtc_reset(crtc); */
+	vmw_du_crtc_reset(crtc);
 	ret = drm_crtc_init_with_planes(dev, crtc, &stdu->base.primary,
 					&stdu->base.cursor,
 					&vmw_stdu_crtc_funcs, NULL);
