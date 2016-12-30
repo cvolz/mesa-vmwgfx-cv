@@ -1191,6 +1191,12 @@ static const struct drm_connector_funcs vmw_stdu_connector_funcs = {
 };
 
 
+static const struct
+drm_connector_helper_funcs vmw_stdu_connector_helper_funcs = {
+	.best_encoder = vmw_du_connector_best_encoder,
+};
+
+
 
 /******************************************************************************
  * Screen Target Display Plane Functions
@@ -1531,6 +1537,8 @@ static int vmw_stdu_init(struct vmw_private *dev_priv, unsigned unit)
 		DRM_ERROR("Failed to initialize connector\n");
 		goto err_free;
 	}
+
+	drm_connector_helper_add(connector, &vmw_stdu_connector_helper_funcs);
 	connector->status = vmw_du_connector_detect(connector, false);
 	vmw_connector_state_to_vcs(connector->state)->is_implicit = false;
 
