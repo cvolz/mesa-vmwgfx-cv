@@ -537,6 +537,41 @@ void vmw_du_primary_plane_destroy(struct drm_plane *plane)
 }
 
 
+int vmw_du_crtc_atomic_check(struct drm_crtc *crtc,
+			     struct drm_crtc_state *new_state)
+{
+	struct vmw_display_unit *du = vmw_crtc_to_du(new_state->crtc);
+
+
+	if (new_state->state->num_connector > 1) {
+		DRM_ERROR("Too many connectors\n");
+		return -EINVAL;
+	}
+
+	if (new_state->state->num_connector == 1 &&
+	    new_state->state->connectors[0] != &du->connector) {
+		DRM_ERROR("Connectors don't match %p %p\n",
+			new_state->state->connectors[0], &du->connector);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+
+void vmw_du_crtc_atomic_begin(struct drm_crtc *crtc,
+			      struct drm_crtc_state *old_crtc_state)
+{
+}
+
+
+void vmw_du_crtc_atomic_flush(struct drm_crtc *crtc,
+			      struct drm_crtc_state *old_crtc_state)
+{
+	/* Do we need to send a flip event here? */
+}
+
+
 /**
  * vmw_du_crtc_duplicate_state - duplicate crtc state
  * @crtc: DRM crtc
