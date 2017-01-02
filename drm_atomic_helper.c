@@ -31,9 +31,9 @@
 #include "drm_crtc_helper.h"
 #include "drm_atomic_helper.h"
 #ifdef VMWGFX_STANDALONE
-#include "core/fence.h"
+#include "core/dma-fence.h"
 #else
-#include <linux/fence.h>
+#include <linux/dma-fence.h>
 #endif
 
 /**
@@ -1013,8 +1013,8 @@ void drm_atomic_helper_wait_for_fences(struct drm_device *dev,
 
 		WARN_ON(!plane->state->fb);
 
-		fence_wait(plane->state->fence, false);
-		fence_put(plane->state->fence);
+		dma_fence_wait(plane->state->fence, false);
+		dma_fence_put(plane->state->fence);
 		plane->state->fence = NULL;
 	}
 }

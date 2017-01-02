@@ -119,4 +119,13 @@ static inline void *vzalloc(unsigned long size)
 	printk(KERN_ERR  "[" DRM_NAME "] " __fmt, ##__VA_ARGS__)
 #endif
 
+/* Ignore the annotation if not present */
+#ifndef __rcu
+#define __rcu
+#endif
+
+#ifndef rcu_pointer_handoff
+#define rcu_pointer_handoff(p) (p)
+#endif
+
 #endif

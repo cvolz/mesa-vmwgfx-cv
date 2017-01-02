@@ -89,11 +89,6 @@
 /* Replicate the functionality of ihold, except a refcount warning */
 #define ihold(_inode) atomic_inc(&((_inode)->i_count))
 
-/* Ignore the annotation if not present */
-#ifndef __rcu
-#define __rcu
-#endif
-
 /* RCU_INIT_POINTER is an optimized version of rcu_assign_pointer */
 #ifndef RCU_INIT_POINTER
 #define RCU_INIT_POINTER(_a, _b) rcu_assign_pointer(_a, _b)

@@ -9,7 +9,7 @@
 
 .PHONY : $(src)/vmwgfx_version.h
 
-vmwgfx-objs    := ww_mutex.o fence.o reservation.o \
+vmwgfx-objs    := ww_mutex.o dma-fence.o reservation.o \
 	        drm_auth.o drm_bufs.o drm_context.o drm_crtc.o \
 		drm_drv.o drm_fops.o drm_ioctl.o drm_irq.o drm_modes.o \
 		drm_edid.o drm_lock.o drm_memory.o \

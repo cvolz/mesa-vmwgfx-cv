@@ -32,6 +32,7 @@
 #endif
 #include <linux/scatterlist.h>
 #include <linux/time.h>
+#include "core/dma-fence.h"
 
 #include "drm_cache.h"
 #include "ttm/ttm_page_alloc.h"
