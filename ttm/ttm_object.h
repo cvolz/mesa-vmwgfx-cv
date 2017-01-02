@@ -37,16 +37,22 @@
 #ifndef _TTM_OBJECT_H_
 #define _TTM_OBJECT_H_
 
+#ifndef TTM_STANDALONE
 #include <linux/list.h>
+#include <drm/drm_hashtab.h>
+#include <linux/kref.h>
+#include <linux/rcupdate.h>
+#include <linux/dma-buf.h>
+#include <ttm/ttm_memory.h>
+#else
+#include "vmwgfx_compat.h"
+#include <linux/list.h>
+#include <linux/kref.h>
 #include <linux/rcupdate.h>
 #include "drm_hashtab.h"
-#include <linux/kref.h>
-#include <ttm/ttm_memory.h>
-#ifndef TTM_STANDALONE
-#include <linux/dma-buf.h>
-#endif
-
+#include "ttm/ttm_memory.h"
 struct dma_buf_ops;
+#endif
 
 /**
  * enum ttm_ref_type

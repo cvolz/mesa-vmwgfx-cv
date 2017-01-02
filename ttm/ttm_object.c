@@ -57,15 +57,25 @@
  */
 
 #define pr_fmt(fmt) "[TTM] " fmt
-#include "vmwgfx_compat.h"
 
+#ifndef TTM_STANDALONE
+#include <drm/ttm/ttm_object.h>
+#include <drm/ttm/ttm_module.h>
+#include <linux/list.h>
+#include <linux/spinlock.h>
+#include <linux/slab.h>
+#include <linux/module.h>
+#include <linux/atomic.h>
+#else
+#include "vmwgfx_compat.h"
 #include "ttm/ttm_object.h"
 #include "ttm/ttm_module.h"
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/module.h>
-#include <asm/atomic.h>
+#include <linux/atomic.h>
+#endif
 
 struct ttm_object_file {
 	struct ttm_object_device *tdev;

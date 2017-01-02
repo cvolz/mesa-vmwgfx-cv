@@ -508,11 +508,7 @@ static unsigned long vmw_mob_build_pt(struct vmw_piter *data_iter,
 	for (pt_page = 0; pt_page < num_pt_pages; ++pt_page) {
 		page = vmw_piter_page(pt_iter);
 
-#ifdef VMW_HAS_STACK_KMAP_ATOMIC
 		save_addr = addr = kmap_atomic(page);
-#else
-		save_addr = addr = kmap_atomic(page, KM_USER0);
-#endif
 
 		for (i = 0; i < PAGE_SIZE / VMW_PPN_SIZE; ++i) {
 			vmw_mob_assign_ppn(&addr,
@@ -521,11 +517,7 @@ static unsigned long vmw_mob_build_pt(struct vmw_piter *data_iter,
 				break;
 			WARN_ON(!vmw_piter_next(data_iter));
 		}
-#ifdef VMW_HAS_STACK_KMAP_ATOMIC
 		kunmap_atomic(save_addr);
-#else
-		kunmap_atomic(save_addr, KM_USER0);
-#endif
 		vmw_piter_next(pt_iter);
 	}
 

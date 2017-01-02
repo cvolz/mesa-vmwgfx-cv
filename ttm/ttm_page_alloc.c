@@ -32,8 +32,24 @@
  */
 
 #define pr_fmt(fmt) "[TTM] " fmt
-#include "vmwgfx_compat.h"
 
+#ifndef TTM_STANDALONE
+#include <linux/list.h>
+#include <linux/spinlock.h>
+#include <linux/highmem.h>
+#include <linux/mm_types.h>
+#include <linux/module.h>
+#include <linux/mm.h>
+#include <linux/seq_file.h> /* for seq_printf */
+#include <linux/slab.h>
+#include <linux/dma-mapping.h>
+
+#include <linux/atomic.h>
+
+#include <drm/ttm/ttm_bo_driver.h>
+#include <drm/ttm/ttm_page_alloc.h>
+#else
+#include "vmwgfx_compat.h"
 #include <linux/list.h>
 #include <linux/spinlock.h>
 #include <linux/highmem.h>
@@ -48,8 +64,9 @@
 
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_page_alloc.h"
+#endif
 
-#ifndef VMWGFX_STANDALONE
+#ifndef TTM_STANDALONE
 #if IS_ENABLED(CONFIG_AGP)
 #include <asm/agp.h>
 #endif
@@ -206,11 +223,7 @@ static ssize_t ttm_pool_show(struct kobject *kobj,
 	return snprintf(buffer, PAGE_SIZE, "%u\n", val);
 }
 
-#if (defined(TTM_STANDALONE) && !defined(TTM_HAVE_CSO))
-static struct sysfs_ops ttm_pool_sysfs_ops = {
-#else
 static const struct sysfs_ops ttm_pool_sysfs_ops = {
-#endif
 	.show = &ttm_pool_show,
 	.store = &ttm_pool_store,
 };
@@ -391,7 +404,6 @@ out:
 	return nr_free;
 }
 
-#ifndef TTM_STANDALONE
 /**
  * Callback for mm to request pool to reduce number of page held.
  *
@@ -440,10 +452,17 @@ ttm_pool_shrink_count(struct shrinker *shrink, struct shrink_control *sc)
 	return count;
 }
 
+TTM_STANDALONE_DEFINE_COMPAT_SHRINK(ttm_pool_shrink_count,
+				       ttm_pool_shrink_scan)
+
 static void ttm_pool_mm_shrink_init(struct ttm_pool_manager *manager)
 {
+#ifndef TTM_STANDALONE_COMPAT_SHRINK
 	manager->mm_shrink.count_objects = ttm_pool_shrink_count;
 	manager->mm_shrink.scan_objects = ttm_pool_shrink_scan;
+#else
+	manager->mm_shrink.shrink = TTM_STANDALONE_COMPAT_SHRINK;
+#endif
 	manager->mm_shrink.seeks = 1;
 	register_shrinker(&manager->mm_shrink);
 }
@@ -452,17 +471,6 @@ static void ttm_pool_mm_shrink_fini(struct ttm_pool_manager *manager)
 {
 	unregister_shrinker(&manager->mm_shrink);
 }
-#else
-static void ttm_pool_mm_shrink_init(struct ttm_pool_manager *manager)
-{
-	;
-}
-
-static void ttm_pool_mm_shrink_fini(struct ttm_pool_manager *manager)
-{
-	;
-}
-#endif
 
 static int ttm_set_pages_caching(struct page **pages,
 		enum ttm_caching_state cstate, unsigned cpages)

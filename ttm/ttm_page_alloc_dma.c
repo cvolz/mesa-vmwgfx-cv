@@ -36,6 +36,26 @@
 #if defined(CONFIG_SWIOTLB) || defined(CONFIG_INTEL_IOMMU)
 #define pr_fmt(fmt) "[TTM] " fmt
 
+#ifndef TTM_STANDALONE
+#include <linux/dma-mapping.h>
+#include <linux/list.h>
+#include <linux/seq_file.h> /* for seq_printf */
+#include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/highmem.h>
+#include <linux/mm_types.h>
+#include <linux/module.h>
+#include <linux/mm.h>
+#include <linux/atomic.h>
+#include <linux/device.h>
+#include <linux/kthread.h>
+#include <drm/ttm/ttm_bo_driver.h>
+#include <drm/ttm/ttm_page_alloc.h>
+#if IS_ENABLED(CONFIG_AGP)
+#include <asm/agp.h>
+#endif
+#else
+#include "vmwgfx_compat.h"
 #include <linux/dma-mapping.h>
 #include <linux/list.h>
 #include <linux/seq_file.h> /* for seq_printf */
@@ -50,9 +70,8 @@
 #include <linux/kthread.h>
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_page_alloc.h"
-#if IS_ENABLED(CONFIG_AGP)
-#include <asm/agp.h>
 #endif
+
 
 #define NUM_PAGES_TO_ALLOC		(PAGE_SIZE/sizeof(struct page *))
 #define SMALL_ALLOCATION		4
@@ -858,7 +877,6 @@ static int ttm_dma_pool_get_pages(struct dma_pool *pool,
 	if (count) {
 		d_page = list_first_entry(&pool->free_list, struct dma_page, page_list);
 		ttm->pages[index] = d_page->p;
-		ttm_dma->cpu_address[index] = d_page->vaddr;
 		ttm_dma->dma_address[index] = d_page->dma;
 		list_move_tail(&d_page->page_list, &ttm_dma->pages_list);
 		r = 0;
@@ -989,7 +1007,6 @@ void ttm_dma_unpopulate(struct ttm_dma_tt *ttm_dma, struct device *dev)
 	INIT_LIST_HEAD(&ttm_dma->pages_list);
 	for (i = 0; i < ttm->num_pages; i++) {
 		ttm->pages[i] = NULL;
-		ttm_dma->cpu_address[i] = 0;
 		ttm_dma->dma_address[i] = 0;
 	}
 
@@ -1064,10 +1081,17 @@ ttm_dma_pool_shrink_count(struct shrinker *shrink, struct shrink_control *sc)
 	return count;
 }
 
+TTM_STANDALONE_DEFINE_COMPAT_SHRINK(ttm_dma_pool_shrink_count,
+				       ttm_dma_pool_shrink_scan)
+
 static void ttm_dma_pool_mm_shrink_init(struct ttm_pool_manager *manager)
 {
+#ifndef TTM_STANDALONE_COMPAT_SHRINK
 	manager->mm_shrink.count_objects = ttm_dma_pool_shrink_count;
 	manager->mm_shrink.scan_objects = &ttm_dma_pool_shrink_scan;
+#else
+	manager->mm_shrink.shrink = TTM_STANDALONE_COMPAT_SHRINK;
+#endif
 	manager->mm_shrink.seeks = 1;
 	register_shrinker(&manager->mm_shrink);
 }

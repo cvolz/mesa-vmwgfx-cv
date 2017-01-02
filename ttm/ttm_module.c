@@ -28,11 +28,20 @@
  * Authors: Thomas Hellstrom <thellstrom-at-vmware-dot-com>
  * 	    Jerome Glisse
  */
+#ifndef TTM_STANDALONE
+#include <linux/module.h>
+#include <linux/device.h>
+#include <linux/sched.h>
+#include <drm/ttm/ttm_module.h>
+#include <drm/drm_sysfs.h>
+#else
+#include "vmwgfx_compat.h"
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/sched.h>
 #include "ttm/ttm_module.h"
 #include "drm_sysfs.h"
+#endif
 
 static DECLARE_WAIT_QUEUE_HEAD(exit_q);
 static atomic_t device_released;
@@ -70,8 +79,12 @@ static int __init ttm_init(void)
 {
 	int ret;
 
+#ifndef TTM_STANDALONE
+	ret = dev_set_name(&ttm_drm_class_device, "ttm");
+#else
 	ret = dev_set_name(&ttm_drm_class_device, "ttm_vmwgfx");
-	if (ret != 0)
+#endif
+	if (unlikely(ret != 0))
 		return ret;
 
 	atomic_set(&device_released, 0);

@@ -24,14 +24,23 @@
  * USE OR OTHER DEALINGS IN THE SOFTWARE.
  *
  **************************************************************************/
-#include "vmwgfx_compat.h"
 
+#ifndef TTM_STANDALONE
+#include <drm/ttm/ttm_execbuf_util.h>
+#include <drm/ttm/ttm_bo_driver.h>
+#include <drm/ttm/ttm_placement.h>
+#include <linux/wait.h>
+#include <linux/sched.h>
+#include <linux/module.h>
+#else
+#include "vmwgfx_compat.h"
 #include "ttm/ttm_execbuf_util.h"
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_placement.h"
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/module.h>
+#endif
 
 static void ttm_eu_backoff_reservation_reverse(struct list_head *list,
 					      struct ttm_validate_buffer *entry)
@@ -180,7 +189,8 @@ int ttm_eu_reserve_buffers(struct ww_acquire_ctx *ticket,
 EXPORT_SYMBOL(ttm_eu_reserve_buffers);
 
 void ttm_eu_fence_buffer_objects(struct ww_acquire_ctx *ticket,
-				 struct list_head *list, struct dma_fence *fence)
+				 struct list_head *list,
+				 struct dma_fence *fence)
 {
 	struct ttm_validate_buffer *entry;
 	struct ttm_buffer_object *bo;

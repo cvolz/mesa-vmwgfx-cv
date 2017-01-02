@@ -1065,9 +1065,12 @@ static int vmw_driver_open(struct drm_device *dev, struct drm_file *file_priv)
 	struct vmw_private *dev_priv = vmw_priv(dev);
 	struct vmw_fpriv *vmw_fp;
 	int ret = -ENOMEM;
+	static DEFINE_SPINLOCK(mapping_lock);
 
+	spin_lock(&mapping_lock);
 	if (dev_priv->bdev.dev_mapping == NULL)
 	    dev_priv->bdev.dev_mapping = dev->anon_inode->i_mapping;
+	spin_unlock(&mapping_lock);
 
 	vmw_fp = kzalloc(sizeof(*vmw_fp), GFP_KERNEL);
 	if (unlikely(!vmw_fp))

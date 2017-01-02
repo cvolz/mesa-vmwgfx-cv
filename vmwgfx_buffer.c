@@ -850,6 +850,7 @@ struct ttm_bo_driver vmw_bo_driver = {
 	.invalidate_caches = vmw_invalidate_caches,
 	.init_mem_type = vmw_init_mem_type,
 	.evict_flags = vmw_evict_flags,
+	.eviction_valuable = ttm_bo_eviction_valuable,
 	.move = NULL,
 	.verify_access = vmw_verify_access,
 	.move_notify = vmw_move_notify,

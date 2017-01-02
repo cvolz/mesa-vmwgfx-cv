@@ -26,8 +26,19 @@
  **************************************************************************/
 
 #define pr_fmt(fmt) "[TTM] " fmt
-#include "vmwgfx_compat.h"
 
+#ifndef TTM_STANDALONE
+#include <drm/ttm/ttm_memory.h>
+#include <drm/ttm/ttm_module.h>
+#include <drm/ttm/ttm_page_alloc.h>
+#include <linux/spinlock.h>
+#include <linux/sched.h>
+#include <linux/wait.h>
+#include <linux/mm.h>
+#include <linux/module.h>
+#include <linux/slab.h>
+#else
+#include "vmwgfx_compat.h"
 #include "ttm/ttm_memory.h"
 #include "ttm/ttm_module.h"
 #include "ttm/ttm_page_alloc.h"
@@ -37,6 +48,7 @@
 #include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#endif
 
 #define TTM_MEMORY_ALLOC_RETRIES 4
 
@@ -156,11 +168,7 @@ static struct attribute *ttm_mem_zone_attrs[] = {
 	NULL
 };
 
-#if (defined(TTM_STANDALONE) && !defined(TTM_HAVE_CSO))
-static struct sysfs_ops ttm_mem_zone_ops = {
-#else
 static const struct sysfs_ops ttm_mem_zone_ops = {
-#endif
 	.show = &ttm_mem_zone_show,
 	.store = &ttm_mem_zone_store
 };
@@ -605,3 +613,9 @@ size_t ttm_round_pot(size_t size)
 	return 0;
 }
 EXPORT_SYMBOL(ttm_round_pot);
+
+uint64_t ttm_get_kernel_zone_memory_size(struct ttm_mem_global *glob)
+{
+	return glob->zone_kernel->max_mem;
+}
+EXPORT_SYMBOL(ttm_get_kernel_zone_memory_size);

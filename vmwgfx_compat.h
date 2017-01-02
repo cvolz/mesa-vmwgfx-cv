@@ -295,12 +295,36 @@ static inline int vmwgfx_kref_sub(struct kref *kref, unsigned int count,
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2,6,37))
 #define VMW_HAS_STACK_KMAP_ATOMIC
+#else
+static inline void *kmap_atomic_drm(struct page *page)
+{
+	return kmap_atomic(page, KM_USER0);
+}
+
+static inline void *kmap_atomic_prot_drm(struct page *page, pgprot_t prot)
+{
+	return kmap_atomic_prot(page, KM_USER0, prot);
+}
+
+static inline void kunmap_atomic_drm(void *addr)
+{
+	kunmap_atomic(addr, KM_USER0);
+}
+
+#undef kmap_atomic
+#define kmap_atomic kmap_atomic_drm
+#undef kmap_atomic_prot
+#define kmap_atomic_prot kmap_atomic_prot_drm
+#undef kunmap_atomic
+#define kunmap_atomic kunmap_atomic_drm
+
 #endif
 
 /**
  * shmem_read_mapping_page appeared in 3.0-rc5
  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 0, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 0, 0) && \
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 5))
 #define shmem_read_mapping_page(_a, _b) read_mapping_page(_a, _b, NULL)
 #endif
 
@@ -523,9 +547,56 @@ static inline u64 ktime_get_raw_ns(void)
 }
 #endif
 
-#define ttm_dma_page_alloc_init(_a, _b) {}
-#define ttm_dma_page_alloc_fini() {}
-#define ttm_dma_populate(_a, _b) ({-EINVAL;})
-#define ttm_dma_unpopulate(_a, _b) {}
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(3, 0, 0))
+#include <linux/shrinker.h>
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 0, 0))
+struct shrink_control {
+	gfp_t gfp_mask;
+	unsigned long nr_to_scan;
+};
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0))
+#define SHRINK_STOP (~0UL)
+
+static inline int __ttm_compat_shrink(struct shrinker *shrink,
+				      unsigned long (*count_objects)
+				      (struct shrinker *,
+				       struct shrink_control *),
+				      unsigned long (*scan_objects)
+				      (struct shrinker *,
+				       struct shrink_control *),
+				      int nr_to_scan,
+				      gfp_t gfp_mask)
+{
+	unsigned long ret;
+	struct shrink_control sc;
+
+	sc.gfp_mask = gfp_mask;
+	sc.nr_to_scan = nr_to_scan;
+
+	if (nr_to_scan != 0) {
+		ret = scan_objects(shrink, &sc);
+		if (ret == SHRINK_STOP)
+			return -1;
+	}
+	return (int) count_objects(shrink, &sc);
+}
+
+#define TTM_STANDALONE_DEFINE_COMPAT_SHRINK(__co, __so)			\
+	static int ttm_compat_shrink(struct shrinker *shrink,		\
+				     int nr_to_scan,			\
+				     gfp_t gfp_mask)			\
+{									\
+	return __ttm_compat_shrink(shrink, __co, __so, nr_to_scan,	\
+				   gfp_mask);				\
+}									\
+
+#define TTM_STANDALONE_COMPAT_SHRINK ttm_compat_shrink
+#else
+#define TTM_STANDALONE_DEFINE_COMPAT_SHRINK(__co, __so)
+#endif
 
 #endif

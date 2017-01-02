@@ -30,6 +30,7 @@
 
 #define pr_fmt(fmt) "[TTM] " fmt
 
+#ifndef TTM_STANDALONE
 #include <linux/sched.h>
 #include <linux/highmem.h>
 #include <linux/pagemap.h>
@@ -38,13 +39,29 @@
 #include <linux/swap.h>
 #include <linux/slab.h>
 #include <linux/export.h>
+#include <drm/drm_cache.h>
+#include <drm/drm_mem_util.h>
+#include <drm/ttm/ttm_module.h>
+#include <drm/ttm/ttm_bo_driver.h>
+#include <drm/ttm/ttm_placement.h>
+#include <drm/ttm/ttm_page_alloc.h>
+#else
 #include "vmwgfx_compat.h"
+#include <linux/sched.h>
+#include <linux/highmem.h>
+#include <linux/pagemap.h>
+#include <linux/shmem_fs.h>
+#include <linux/file.h>
+#include <linux/swap.h>
+#include <linux/slab.h>
+#include <linux/export.h>
 #include "drm_cache.h"
 #include "drm_mem_util.h"
 #include "ttm/ttm_module.h"
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_placement.h"
 #include "ttm/ttm_page_alloc.h"
+#endif
 
 /**
  * Allocates storage for pointers to the pages that back the ttm.
@@ -58,10 +75,8 @@ static void ttm_dma_tt_alloc_page_directory(struct ttm_dma_tt *ttm)
 {
 	ttm->ttm.pages = drm_calloc_large(ttm->ttm.num_pages,
 					  sizeof(*ttm->ttm.pages) +
-					  sizeof(*ttm->dma_address) +
-					  sizeof(*ttm->cpu_address));
-	ttm->cpu_address = (void *) (ttm->ttm.pages + ttm->ttm.num_pages);
-	ttm->dma_address = (void *) (ttm->cpu_address + ttm->ttm.num_pages);
+					  sizeof(*ttm->dma_address));
+	ttm->dma_address = (void *) (ttm->ttm.pages + ttm->ttm.num_pages);
 }
 
 #ifdef CONFIG_X86
@@ -167,12 +182,10 @@ EXPORT_SYMBOL(ttm_tt_set_placement_caching);
 
 void ttm_tt_destroy(struct ttm_tt *ttm)
 {
-	if (unlikely(ttm == NULL))
+	if (ttm == NULL)
 		return;
 
-	if (ttm->state == tt_bound) {
-		ttm_tt_unbind(ttm);
-	}
+	ttm_tt_unbind(ttm);
 
 	if (ttm->state == tt_unbound)
 		ttm_tt_unpopulate(ttm);
@@ -247,7 +260,6 @@ void ttm_dma_tt_fini(struct ttm_dma_tt *ttm_dma)
 
 	drm_free_large(ttm->pages);
 	ttm->pages = NULL;
-	ttm_dma->cpu_address = NULL;
 	ttm_dma->dma_address = NULL;
 }
 EXPORT_SYMBOL(ttm_dma_tt_fini);
@@ -299,7 +311,7 @@ int ttm_tt_swapin(struct ttm_tt *ttm)
 	swap_storage = ttm->swap_storage;
 	BUG_ON(swap_storage == NULL);
 
-	swap_space = file_inode(swap_storage)->i_mapping;
+	swap_space = swap_storage->f_mapping;
 
 	for (i = 0; i < ttm->num_pages; ++i) {
 		from_page = shmem_read_mapping_page(swap_space, i);
@@ -348,7 +360,7 @@ int ttm_tt_swapout(struct ttm_tt *ttm, struct file *persistent_swap_storage)
 	} else
 		swap_storage = persistent_swap_storage;
 
-	swap_space = file_inode(swap_storage)->i_mapping;
+	swap_space = swap_storage->f_mapping;
 
 	for (i = 0; i < ttm->num_pages; ++i) {
 		from_page = ttm->pages[i];

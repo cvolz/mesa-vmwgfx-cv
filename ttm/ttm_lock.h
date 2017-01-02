@@ -49,9 +49,15 @@
 #ifndef _TTM_LOCK_H_
 #define _TTM_LOCK_H_
 
+#ifndef TTM_STANDALONE
+#include <ttm/ttm_object.h>
+#include <linux/wait.h>
+#include <linux/atomic.h>
+#else
 #include "ttm/ttm_object.h"
 #include <linux/wait.h>
 #include <linux/atomic.h>
+#endif
 
 /**
  * struct ttm_lock
@@ -110,23 +116,6 @@ extern void ttm_read_unlock(struct ttm_lock *lock);
  * -ERESTARTSYS If interrupted by a signal and interruptible is true.
  */
 extern int ttm_read_lock(struct ttm_lock *lock, bool interruptible);
-
-/**
- * ttm_read_trylock
- *
- * @lock: Pointer to a struct ttm_lock
- * @interruptible: Interruptible sleeping while waiting for a lock.
- *
- * Tries to take the lock in read mode. If the lock is already held
- * in write mode, the function will return -EBUSY. If the lock is held
- * in vt or suspend mode, the function will sleep until these modes
- * are unlocked.
- *
- * Returns:
- * -EBUSY The lock was already held in write mode.
- * -ERESTARTSYS If interrupted by a signal and interruptible is true.
- */
-extern int ttm_read_trylock(struct ttm_lock *lock, bool interruptible);
 
 /**
  * ttm_write_unlock

@@ -28,13 +28,24 @@
  * Authors: Thomas Hellstrom <thellstrom-at-vmware-dot-com>
  */
 
-#include "ttm/ttm_lock.h"
-#include "ttm/ttm_module.h"
-#include <asm/atomic.h>
+#ifndef TTM_STANDALONE
+#include <drm/ttm/ttm_lock.h>
+#include <drm/ttm/ttm_module.h>
+#include <linux/atomic.h>
 #include <linux/errno.h>
 #include <linux/wait.h>
 #include <linux/sched.h>
 #include <linux/module.h>
+#else
+#include "vmwgfx_compat.h"
+#include "ttm/ttm_lock.h"
+#include "ttm/ttm_module.h"
+#include <linux/atomic.h>
+#include <linux/errno.h>
+#include <linux/wait.h>
+#include <linux/sched.h>
+#include <linux/module.h>
+#endif
 
 #define TTM_WRITE_LOCK_PENDING    (1 << 0)
 #define TTM_VT_LOCK_PENDING       (1 << 1)

@@ -27,8 +27,17 @@
 /*
  * Authors: Thomas Hellstrom <thellstrom-at-vmware-dot-com>
  */
-#include "vmwgfx_compat.h"
 
+#ifndef TTM_STANDALONE
+#include <drm/ttm/ttm_module.h>
+#include <drm/ttm/ttm_bo_driver.h>
+#include <drm/ttm/ttm_placement.h>
+#include <drm/drm_mm.h>
+#include <linux/slab.h>
+#include <linux/spinlock.h>
+#include <linux/module.h>
+#else
+#include "vmwgfx_compat.h"
 #include "ttm/ttm_module.h"
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_placement.h"
@@ -36,6 +45,7 @@
 #include <linux/slab.h>
 #include <linux/spinlock.h>
 #include <linux/module.h>
+#endif
 
 /**
  * Currently we use a spinlock for the lock, but a mutex *may* be
