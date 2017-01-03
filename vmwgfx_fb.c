@@ -459,7 +459,7 @@ static int vmw_fb_kms_detach(struct vmw_fb_par *par,
 		set.y = 0;
 		set.mode = NULL;
 		set.fb = NULL;
-		set.num_connectors = 1;
+		set.num_connectors = 0;
 		set.connectors = &par->con;
 		ret = drm_mode_set_config_internal(&set);
 		if (ret) {
@@ -540,6 +540,9 @@ static int vmw_fb_kms_framebuffer(struct fb_info *info)
 				      true, &mode_cmd);
 	if (IS_ERR(vfb))
 		return PTR_ERR(vfb);
+
+	vfb->base.pixel_format = drm_mode_legacy_fb_format(mode_cmd.bpp,
+							   mode_cmd.depth);
 
 	par->set_fb = &vfb->base;
 
@@ -870,7 +873,9 @@ int vmw_fb_off(struct vmw_private *vmw_priv)
 	flush_delayed_work(&par->local_work);
 
 	mutex_lock(&par->bo_mutex);
+	drm_modeset_lock_all(vmw_priv->dev);
 	(void) vmw_fb_kms_detach(par, true, false);
+	drm_modeset_unlock_all(vmw_priv->dev);
 	mutex_unlock(&par->bo_mutex);
 
 	return 0;
