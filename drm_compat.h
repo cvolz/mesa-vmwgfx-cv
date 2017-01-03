@@ -47,6 +47,12 @@
 
 #include <asm/pgalloc.h>
 
+
+/* Event tracing is not used in vmwgfx */
+#define trace_drm_vblank_event_delivered(pid, pipe, seq)
+#define trace_drm_vblank_event_queued(pid, pipe, seq)
+#define trace_drm_vblank_event(pipe, seq)
+
 /**
  * VM_RESERVED disappeared in 3.7, and is replaced in upstream
  * ttm_bo_vm.c with VM_DONTDUMP. Try to keep code in sync with

@@ -17,7 +17,7 @@ vmwgfx-objs    := ww_mutex.o dma-fence.o reservation.o \
 		drm_debugfs.o drm_info.o drm_global.o drm_cache.o\
 		drm_prime.o drm_pci.o  \
 		drm_prime.o drm_atomic.o \
-		drm_scatter.o drm_dma.o drm_trace_points.o drm_modeset_lock.o \
+		drm_scatter.o drm_dma.o drm_modeset_lock.o \
 		drm_crtc_helper.o drm_plane_helper.o drm_atomic_helper.o \
 		drm_bridge.o drm_rect.o drm_vma_manager.o \
 		ttm_bo.o ttm_bo_util.o ttm_bo_vm.o ttm_tt.o ttm_memory.o \
