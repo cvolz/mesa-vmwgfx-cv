@@ -601,136 +601,6 @@ static void vmw_stdu_crtc_helper_disable(struct drm_crtc *crtc)
 }
 
 /**
- * vmw_stdu_crtc_set_config - Sets a mode
- *
- * @set:  mode parameters
- *
- * This function is the device-specific portion of the DRM CRTC mode set.
- * For the SVGA device, we do this by defining a Screen Target, binding a
- * GB Surface to that target, and finally update the screen target.
- *
- * RETURNS:
- * 0 on success, error code otherwise
- */
-static int vmw_stdu_crtc_set_config(struct drm_mode_set *set)
-{
-	struct vmw_private *dev_priv;
-	struct vmw_framebuffer *vfb;
-	struct vmw_screen_target_display_unit *stdu;
-	struct drm_display_mode *mode;
-	struct drm_framebuffer  *new_fb;
-	struct drm_crtc      *crtc;
-	struct drm_encoder   *encoder;
-	struct drm_connector *connector;
-	bool turning_off;
-	int    ret;
-
-
-	if (!set || !set->crtc)
-		return -EINVAL;
-
-	crtc     = set->crtc;
-	stdu     = vmw_crtc_to_stdu(crtc);
-	mode     = set->mode;
-	new_fb   = set->fb;
-	dev_priv = vmw_priv(crtc->dev);
-	turning_off = set->num_connectors == 0 || !mode || !new_fb;
-	vfb = (new_fb) ? vmw_framebuffer_to_vfb(new_fb) : NULL;
-
-	if (set->num_connectors > 1) {
-		DRM_ERROR("Too many connectors\n");
-		return -EINVAL;
-	}
-
-	if (set->num_connectors == 1 &&
-	    set->connectors[0] != &stdu->base.connector) {
-		DRM_ERROR("Connectors don't match %p %p\n",
-			set->connectors[0], &stdu->base.connector);
-		return -EINVAL;
-	}
-
-	if (!turning_off && (set->x + mode->hdisplay > new_fb->width ||
-			     set->y + mode->vdisplay > new_fb->height)) {
-		DRM_ERROR("Set outside of framebuffer\n");
-		return -EINVAL;
-	}
-
-	/* Only one active implicit frame-buffer at a time. */
-	mutex_lock(&dev_priv->global_kms_state_mutex);
-	if (!turning_off && stdu->base.is_implicit && dev_priv->implicit_fb &&
-	    !(dev_priv->num_implicit == 1 && stdu->base.active_implicit)
-	    && dev_priv->implicit_fb != vfb) {
-		mutex_unlock(&dev_priv->global_kms_state_mutex);
-		DRM_ERROR("Multiple implicit framebuffers not supported.\n");
-		return -EINVAL;
-	}
-	mutex_unlock(&dev_priv->global_kms_state_mutex);
-
-	/* Since they always map one to one these are safe */
-	connector = &stdu->base.connector;
-	encoder   = &stdu->base.encoder;
-
-	if (stdu->defined) {
-		ret = vmw_stdu_bind_st(dev_priv, stdu, NULL);
-		if (ret)
-			return ret;
-
-		vmw_stdu_unpin_display(stdu);
-		(void) vmw_stdu_update_st(dev_priv, stdu);
-		vmw_kms_del_active(dev_priv, &stdu->base);
-
-		ret = vmw_stdu_destroy_st(dev_priv, stdu);
-		if (ret)
-			return ret;
-
-		crtc->primary->fb = NULL;
-		crtc->enabled = false;
-		encoder->crtc = NULL;
-		connector->encoder = NULL;
-		stdu->content_fb_type = SAME_AS_DISPLAY;
-		crtc->x = set->x;
-		crtc->y = set->y;
-	}
-
-	if (turning_off)
-		return 0;
-
-	/*
-	 * Steps to displaying a surface, assume surface is already
-	 * bound:
-	 *   1.  define a screen target
-	 *   2.  bind a fb to the screen target
-	 *   3.  update that screen target (this is done later by
-	 *       vmw_kms_stdu_do_surface_dirty_or_present)
-	 */
-	/*
-	 * Note on error handling: We can't really restore the crtc to
-	 * it's original state on error, but we at least update the
-	 * current state to what's submitted to hardware to enable
-	 * future recovery.
-	 */
-	vmw_svga_enable(dev_priv);
-	ret = vmw_stdu_define_st(dev_priv, stdu, mode, set->x, set->y);
-	if (ret)
-		return ret;
-
-	crtc->x = set->x;
-	crtc->y = set->y;
-	crtc->mode = *mode;
-
-	ret = vmw_stdu_bind_fb(dev_priv, crtc, mode, new_fb);
-	if (ret)
-		return ret;
-
-	vmw_kms_add_active(dev_priv, &stdu->base, vfb);
-	crtc->enabled = true;
-	connector->encoder = encoder;
-	encoder->crtc      = crtc;
-
-	return 0;
-}
-
-/**
  * vmw_stdu_crtc_page_flip - Binds a buffer to a screen target
  *
  * @crtc: CRTC to attach FB to
@@ -766,6 +636,7 @@ static int vmw_stdu_crtc_page_flip(struct drm_crtc *crtc,
 
 	if (!stdu->defined || !vmw_kms_crtc_flippable(dev_priv, crtc))
 		return -EINVAL;
+	drm_atomic_set_fb_for_plane(crtc->primary->state, new_fb);
 
 	ret = vmw_stdu_bind_fb(dev_priv, crtc, &crtc->mode, new_fb);
 	if (ret)
@@ -1125,7 +996,7 @@ static const struct drm_crtc_funcs vmw_stdu_crtc_funcs = {
 	.reset = vmw_du_crtc_reset,
 	.atomic_duplicate_state = vmw_du_crtc_duplicate_state,
 	.atomic_destroy_state = vmw_du_crtc_destroy_state,
-	.set_config = vmw_stdu_crtc_set_config,
+	.set_config = drm_atomic_helper_set_config,
 	.page_flip = vmw_stdu_crtc_page_flip,
 };
 
@@ -1407,8 +1278,8 @@ vmw_stdu_primary_plane_atomic_update(struct drm_plane *plane,
 
 
 static const struct drm_plane_funcs vmw_stdu_plane_funcs = {
-	.update_plane = drm_primary_helper_update,
-	.disable_plane = drm_primary_helper_disable,
+	.update_plane = drm_atomic_helper_update_plane,
+	.disable_plane = drm_atomic_helper_disable_plane,
 	.destroy = vmw_du_primary_plane_destroy,
 	.reset = vmw_du_plane_reset,
 	.atomic_duplicate_state = vmw_du_plane_duplicate_state,
@@ -1416,8 +1287,8 @@ static const struct drm_plane_funcs vmw_stdu_plane_funcs = {
 };
 
 static const struct drm_plane_funcs vmw_stdu_cursor_funcs = {
-	.update_plane = vmw_du_cursor_plane_update,
-	.disable_plane = vmw_du_cursor_plane_disable,
+	.update_plane = drm_atomic_helper_update_plane,
+	.disable_plane = drm_atomic_helper_disable_plane,
 	.destroy = vmw_du_cursor_plane_destroy,
 	.reset = vmw_du_plane_reset,
 	.atomic_duplicate_state = vmw_du_plane_duplicate_state,
