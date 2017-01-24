@@ -355,8 +355,13 @@ int ttm_tt_set_user(struct ttm_tt *ttm,
 	if (unlikely(ret != 0))
 		return ret;
 
+#if (KERNEL_VERSION(4, 9, 0) > LINUX_VERSION_CODE)
 	ret = __get_user_pages_unlocked(tsk, mm, start, num_pages,
 					write, 0, ttm->pages, FOLL_TOUCH);
+#else
+	ret = __get_user_pages_unlocked(tsk, mm, start, num_pages,
+					ttm->pages, FOLL_TOUCH);
+#endif
 
 	if (ret != num_pages && write) {
 		ttm_tt_free_user_pages(ttm);
