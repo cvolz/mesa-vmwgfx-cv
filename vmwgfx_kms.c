@@ -827,7 +827,19 @@ void vmw_du_crtc_atomic_begin(struct drm_crtc *crtc,
 void vmw_du_crtc_atomic_flush(struct drm_crtc *crtc,
 			      struct drm_crtc_state *old_crtc_state)
 {
-	/* Do we need to send a flip event here? */
+	struct drm_pending_vblank_event *event = crtc->state->event;
+
+	if (event) {
+		crtc->state->event = NULL;
+
+		spin_lock_irq(&crtc->dev->event_lock);
+		if (drm_crtc_vblank_get(crtc) == 0)
+			drm_crtc_arm_vblank_event(crtc, event);
+		else
+			drm_crtc_send_vblank_event(crtc, event);
+		spin_unlock_irq(&crtc->dev->event_lock);
+	}
+
 }
 
 
