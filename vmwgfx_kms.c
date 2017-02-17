@@ -800,17 +800,12 @@ int vmw_du_crtc_atomic_check(struct drm_crtc *crtc,
 			     struct drm_crtc_state *new_state)
 {
 	struct vmw_display_unit *du = vmw_crtc_to_du(new_state->crtc);
+	int connector_mask = 1 << drm_connector_index(&du->connector);
 
 
-	if (new_state->state->num_connector > 1) {
-		DRM_ERROR("Too many connectors\n");
-		return -EINVAL;
-	}
-
-	if (new_state->state->num_connector == 1 &&
-	    new_state->state->connectors[0] != &du->connector) {
-		DRM_ERROR("Connectors don't match %p %p\n",
-			new_state->state->connectors[0], &du->connector);
+	if (new_state->connector_mask != connector_mask &&
+	    new_state->connector_mask != 0) {
+		DRM_ERROR("Invalid connectors configuration\n");
 		return -EINVAL;
 	}
 
