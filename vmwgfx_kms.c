@@ -708,18 +708,20 @@ int vmw_du_primary_plane_atomic_check(struct drm_plane *plane,
 		.x2 = state->crtc_x + state->crtc_w,
 		.y2 = state->crtc_y + state->crtc_h,
 	};
-	const struct drm_rect clip = {
-		.x2 = state->crtc->mode.hdisplay,
-		.y2 = state->crtc->mode.vdisplay,
-	};
+	struct drm_rect clip = {0};
 	int ret;
 
+
+	if (state->crtc) {
+		clip.x2 = state->crtc->mode.hdisplay;
+		clip.y2 = state->crtc->mode.vdisplay;
+	}
 
 	ret = drm_plane_helper_check_update(plane, state->crtc, new_fb,
 					    &src, &dest, &clip,
 					    DRM_PLANE_HELPER_NO_SCALING,
 					    DRM_PLANE_HELPER_NO_SCALING,
-					    false, false, &visible);
+					    false, true, &visible);
 
 
 	if (!ret && new_fb) {
@@ -801,6 +803,12 @@ int vmw_du_crtc_atomic_check(struct drm_crtc *crtc,
 {
 	struct vmw_display_unit *du = vmw_crtc_to_du(new_state->crtc);
 	int connector_mask = 1 << drm_connector_index(&du->connector);
+	bool has_primary = new_state->plane_mask &
+			   BIT(drm_plane_index(crtc->primary));
+
+	/* We always want to have an active plane with an active CRTC */
+	if (has_primary != new_state->enable)
+		return -EINVAL;
 
 
 	if (new_state->connector_mask != connector_mask &&
@@ -1762,7 +1770,7 @@ vmw_kms_atomic_check_modeset(struct drm_device *dev,
 {
 	struct drm_crtc_state *crtc_state;
 	struct drm_crtc *crtc;
-	int i;
+	int i, ret;
 
 
 	for_each_crtc_in_state(state, crtc, crtc_state, i) {
@@ -1775,7 +1783,11 @@ vmw_kms_atomic_check_modeset(struct drm_device *dev,
 		}
 	}
 
-	return drm_atomic_helper_check_modeset(dev, state);
+	ret = drm_atomic_helper_check_modeset(dev, state);
+	if (ret)
+		return ret;
+
+	return drm_atomic_helper_check_planes(dev, state);
 }
 
 
