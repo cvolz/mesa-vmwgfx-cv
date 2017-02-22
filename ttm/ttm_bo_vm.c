@@ -113,7 +113,7 @@ static int ttm_bo_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 	struct page *page;
 	int ret;
 	int i;
-#ifndef TTM_STANDALONE
+#if (KERNEL_VERSION(4, 9, 0) < LINUX_VERSION_CODE)
 	unsigned long address = vmf->address;
 #else
 	unsigned long address = (unsigned long) vmf->virtual_address;
