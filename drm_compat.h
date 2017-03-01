@@ -81,9 +81,10 @@
  * READ_ONCE, WRITE_ONCE appeared in 3.19.
  * This is a simplified version for scalar use only.
  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 19, 0) && \
-     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 8))
+#ifndef READ_ONCE
 #define READ_ONCE(_x) (*(volatile typeof(_x) *)&(_x))
+#endif
+#ifndef WRITE_ONCE
 #define WRITE_ONCE(_x, _val) READ_ONCE(_x) = _val
 #endif
 
