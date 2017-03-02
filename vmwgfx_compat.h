@@ -32,6 +32,7 @@
 #endif
 #include <linux/scatterlist.h>
 #include <linux/time.h>
+#include <linux/pfn_t.h>
 #include "core/dma-fence.h"
 
 #include "drm_cache.h"
@@ -494,12 +495,9 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 /*
  * pfn_t was introduced in 4.5, and also the pfn flag PFN_DEV
  */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0) && \
-     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3))
+#ifndef PFN_DEV
 #define __pfn_to_pfn_t(__pfn, __dummy) (__pfn)
 #define PFN_DEV (1UL << (BITS_PER_LONG - 3))
-#else
-#include <linux/pfn_t.h>
 #endif
 
 /* __get_user_pages_unlocked() appeared in 4.0 */
