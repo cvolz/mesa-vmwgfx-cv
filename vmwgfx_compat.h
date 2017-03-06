@@ -535,7 +535,8 @@ __get_user_pages_unlocked(struct task_struct *tsk, struct mm_struct *mm,
 #define file_inode(_f) (_f)->f_path.dentry->d_inode
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 17, 0) &&	\
+     RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3))
 static inline u64 ktime_get_raw_ns(void)
 {
 	struct timespec ts;
@@ -583,6 +584,8 @@ static inline int __ttm_compat_shrink(struct shrinker *shrink,
 	return (int) count_objects(shrink, &sc);
 }
 
+#if (RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3))
+
 #define TTM_STANDALONE_DEFINE_COMPAT_SHRINK(__co, __so)			\
 	static int ttm_compat_shrink(struct shrinker *shrink,		\
 				     int nr_to_scan,			\
@@ -591,6 +594,18 @@ static inline int __ttm_compat_shrink(struct shrinker *shrink,
 	return __ttm_compat_shrink(shrink, __co, __so, nr_to_scan,	\
 				   gfp_mask);				\
 }									\
+
+#else /* (RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3)) */
+
+#define TTM_STANDALONE_DEFINE_COMPAT_SHRINK(__co, __so)			\
+	static int ttm_compat_shrink(struct shrinker *shrink,		\
+	                             struct shrink_control *sc)         \
+{									\
+	return __ttm_compat_shrink(shrink, __co, __so, sc->nr_to_scan,	\
+				   sc->gfp_mask);			\
+}									\
+
+#endif /* !(RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(7, 3)) */
 
 #define TTM_STANDALONE_COMPAT_SHRINK ttm_compat_shrink
 #else
