@@ -186,6 +186,7 @@ static int vmw_ldu_add_active(struct vmw_private *vmw_priv,
 	if (vfb != ld->fb) {
 		if (ld->fb && ld->fb->unpin)
 			ld->fb->unpin(ld->fb);
+		vmw_svga_enable(vmw_priv);
 		if (vfb->pin)
 			vfb->pin(vfb);
 		ld->fb = vfb;
@@ -224,8 +225,6 @@ static void vmw_ldu_crtc_mode_set_nofb(struct drm_crtc *crtc)
 
 	if (!crtc->state->enable)
 		return;
-
-	vmw_svga_enable(dev_priv);
 }
 
 /**
@@ -270,7 +269,6 @@ static void vmw_ldu_crtc_helper_disable(struct drm_crtc *crtc)
 	}
 
 	dev_priv = vmw_priv(crtc->dev);
-	vmw_svga_disable(dev_priv);
 }
 
 static const struct drm_crtc_funcs vmw_legacy_crtc_funcs = {

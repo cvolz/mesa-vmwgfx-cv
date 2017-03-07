@@ -244,7 +244,6 @@ static void vmw_sou_crtc_mode_set_nofb(struct drm_crtc *crtc)
 		sou->buffer = vps->dmabuf;
 		sou->buffer_size = vps->dmabuf_size;
 
-		vmw_svga_enable(dev_priv);
 		ret = vmw_sou_fifo_create(dev_priv, sou, crtc->x, crtc->y,
 					  &crtc->mode);
 		if (ret)
@@ -501,7 +500,7 @@ vmw_sou_primary_plane_prepare_fb(struct drm_plane *plane,
 		return -ENOMEM;
 
 	dev_priv = vmw_priv(crtc->dev);
-
+	vmw_svga_enable(dev_priv);
 
 	/* After we have alloced the backing store might not be able to
 	 * resume the overlays, this is preferred to failing to alloc.
