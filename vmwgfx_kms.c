@@ -708,14 +708,8 @@ int vmw_du_primary_plane_atomic_check(struct drm_plane *plane,
 		.x2 = state->crtc_x + state->crtc_w,
 		.y2 = state->crtc_y + state->crtc_h,
 	};
-	struct drm_rect clip = {0};
+	struct drm_rect clip = dest;
 	int ret;
-
-
-	if (state->crtc) {
-		clip.x2 = state->crtc->mode.hdisplay;
-		clip.y2 = state->crtc->mode.vdisplay;
-	}
 
 	ret = drm_plane_helper_check_update(plane, state->crtc, new_fb,
 					    &src, &dest, &clip,
