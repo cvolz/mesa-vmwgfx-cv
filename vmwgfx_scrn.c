@@ -323,7 +323,12 @@ static int vmw_sou_crtc_page_flip(struct drm_crtc *crtc,
 	if (!vmw_kms_crtc_flippable(dev_priv, crtc))
 		return -EINVAL;
 
-	drm_atomic_set_fb_for_plane(crtc->primary->state, new_fb);
+	flags &= ~DRM_MODE_PAGE_FLIP_ASYNC;
+	ret = drm_atomic_helper_page_flip(crtc, new_fb, NULL, flags);
+	if (ret) {
+		DRM_ERROR("Page flip error %d.\n", ret);
+		return ret;
+	}
 
 	/* do a full screen dirty update */
 	vclips.x = crtc->x;
@@ -524,6 +529,10 @@ static void
 vmw_sou_primary_plane_atomic_update(struct drm_plane *plane,
 				    struct drm_plane_state *old_state)
 {
+	struct drm_crtc *crtc = plane->state->crtc;
+
+	if (crtc)
+		crtc->primary->fb = plane->state->fb;
 }
 
 
