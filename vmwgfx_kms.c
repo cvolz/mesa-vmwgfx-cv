@@ -940,6 +940,11 @@ vmw_du_plane_duplicate_state(struct drm_plane *plane)
 
 	vps->pinned = 0;
 
+	/* Mapping is managed by prepare_fb/cleanup_fb */
+	memset(&vps->guest_map, 0, sizeof(vps->guest_map));
+	memset(&vps->host_map, 0, sizeof(vps->host_map));
+	vps->cpp = 0;
+
 	/* Each ref counted resource needs to be acquired again */
 	if (vps->surf)
 		(void) vmw_surface_reference(vps->surf);
@@ -997,6 +1002,17 @@ vmw_du_plane_destroy_state(struct drm_plane *plane,
 {
 	struct vmw_plane_state *vps = vmw_plane_state_to_vps(state);
 
+
+	/* Should have been freed by cleanup_fb */
+	if (vps->guest_map.virtual) {
+		DRM_ERROR("Guest mapping not freed\n");
+		ttm_bo_kunmap(&vps->guest_map);
+	}
+
+	if (vps->host_map.virtual) {
+		DRM_ERROR("Host mapping not freed\n");
+		ttm_bo_kunmap(&vps->host_map);
+	}
 
 	if (vps->surf)
 		vmw_surface_unreference(&vps->surf);
@@ -1587,6 +1603,25 @@ out_err1:
 	return ret;
 }
 
+
+/**
+ * vmw_kms_srf_ok - check if a surface can be created
+ *
+ * @width: requested width
+ * @height: requested height
+ *
+ * Surfaces need to be less than texture size
+ */
+static bool
+vmw_kms_srf_ok(struct vmw_private *dev_priv, uint32_t width, uint32_t height)
+{
+	if (width  > dev_priv->texture_max_width ||
+	    height > dev_priv->texture_max_height)
+		return false;
+
+	return true;
+}
+
 /**
  * vmw_kms_new_framebuffer - Create a new framebuffer.
  *
@@ -1615,7 +1650,8 @@ vmw_kms_new_framebuffer(struct vmw_private *dev_priv,
 	 * therefore, wrap the DMA buf in a surface so we can use the
 	 * SurfaceCopy command.
 	 */
-	if (dmabuf && only_2d &&
+	if (vmw_kms_srf_ok(dev_priv, mode_cmd->width, mode_cmd->height)  &&
+	    dmabuf && only_2d &&
 	    dev_priv->active_display_unit == vmw_du_screen_target) {
 		ret = vmw_create_dmabuf_proxy(dev_priv->dev, mode_cmd,
 					      dmabuf, &surface);
@@ -1716,6 +1752,15 @@ static struct drm_framebuffer *vmw_kms_fb_create(struct drm_device *dev,
 	if (ret)
 		goto err_out;
 
+
+	if (!bo && !vmw_kms_srf_ok(dev_priv, mode_cmd.width, mode_cmd.height)) {
+		DRM_ERROR("Surface size cannot exceed %dx%d",
+			dev_priv->texture_max_width,
+			dev_priv->texture_max_height);
+		goto err_out;
+	}
+
+
 	vfb = vmw_kms_new_framebuffer(dev_priv, bo, surface,
 				      !(dev_priv->capabilities & SVGA_CAP_3D),
 				      &mode_cmd);
@@ -1764,16 +1809,31 @@ vmw_kms_atomic_check_modeset(struct drm_device *dev,
 {
 	struct drm_crtc_state *crtc_state;
 	struct drm_crtc *crtc;
+	struct vmw_private *dev_priv = vmw_priv(dev);
 	int i, ret;
 
 
 	for_each_crtc_in_state(state, crtc, crtc_state, i) {
+		unsigned long requested_bb_mem = 0;
+
 		if (crtc_state->mode.crtc_clock == 0) {
 			/*
 			 * Our virtual device does not have a dot clock,
 			 * so use the logical clock value as the dot clock.
 			 */
 			crtc_state->mode.crtc_clock = crtc_state->mode.clock;
+		}
+
+		if (dev_priv->active_display_unit == vmw_du_screen_target) {
+			if (crtc->primary->fb) {
+				int cpp = crtc->primary->fb->bits_per_pixel / 8;
+
+				requested_bb_mem += crtc->mode.hdisplay * cpp *
+						    crtc->mode.vdisplay;
+			}
+
+			if (requested_bb_mem > dev_priv->prim_bb_mem)
+				return -EINVAL;
 		}
 	}
 
