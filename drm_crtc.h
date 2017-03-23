@@ -253,6 +253,18 @@ struct drm_framebuffer {
 	int bits_per_pixel;
 	int flags;
 	uint32_t pixel_format; /* fourcc format */
+	/**
+	 * @hot_x: X coordinate of the cursor hotspot. Used by the legacy cursor
+	 * IOCTL when the driver supports cursor through a DRM_PLANE_TYPE_CURSOR
+	 * universal plane.
+	 */
+	int hot_x;
+	/**
+	 * @hot_y: Y coordinate of the cursor hotspot. Used by the legacy cursor
+	 * IOCTL when the driver supports cursor through a DRM_PLANE_TYPE_CURSOR
+	 * universal plane.
+	 */
+	int hot_y;
 	struct list_head filp_head;
 };
 
