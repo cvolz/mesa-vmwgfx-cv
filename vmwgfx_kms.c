@@ -673,6 +673,13 @@ int vmw_du_crtc_atomic_check(struct drm_crtc *crtc,
 		return -EINVAL;
 	}
 
+	/*
+	 * Our virtual device does not have a dot clock, so use the logical
+	 * clock value as the dot clock.
+	 */
+	if (new_state->mode.crtc_clock == 0)
+		new_state->adjusted_mode.crtc_clock = new_state->mode.clock;
+
 	return 0;
 }
 
@@ -1672,19 +1679,10 @@ vmw_kms_atomic_check_modeset(struct drm_device *dev,
 	struct drm_crtc_state *crtc_state;
 	struct drm_crtc *crtc;
 	struct vmw_private *dev_priv = vmw_priv(dev);
-	int i, ret;
-
+	int i;
 
 	for_each_crtc_in_state(state, crtc, crtc_state, i) {
 		unsigned long requested_bb_mem = 0;
-
-		if (crtc_state->mode.crtc_clock == 0) {
-			/*
-			 * Our virtual device does not have a dot clock,
-			 * so use the logical clock value as the dot clock.
-			 */
-			crtc_state->mode.crtc_clock = crtc_state->mode.clock;
-		}
 
 		if (dev_priv->active_display_unit == vmw_du_screen_target) {
 			if (crtc->primary->fb) {
@@ -1699,11 +1697,7 @@ vmw_kms_atomic_check_modeset(struct drm_device *dev,
 		}
 	}
 
-	ret = drm_atomic_helper_check_modeset(dev, state);
-	if (ret)
-		return ret;
-
-	return drm_atomic_helper_check_planes(dev, state);
+	return drm_atomic_helper_check(dev, state);
 }
 
 
