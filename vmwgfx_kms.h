@@ -270,8 +270,6 @@ vmw_du_connector_atomic_get_property(struct drm_connector *connector,
 				     const struct drm_connector_state *state,
 				     struct drm_property *property,
 				     uint64_t *val);
-struct drm_encoder *
-vmw_du_connector_best_encoder(struct drm_connector *connector);
 int vmw_du_connector_dpms(struct drm_connector *connector, int mode);
 void vmw_du_connector_save(struct drm_connector *connector);
 void vmw_du_connector_restore(struct drm_connector *connector);

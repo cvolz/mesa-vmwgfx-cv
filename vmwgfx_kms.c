@@ -2368,24 +2368,6 @@ vmw_du_connector_atomic_get_property(struct drm_connector *connector,
 }
 
 
-/**
- * vmw_du_connector_best_encoder - there's only one
- *
- * @connector - connector the property is associated with
- *
- * In our case, there is only one encoder per connector
- */
-struct drm_encoder *
-vmw_du_connector_best_encoder(struct drm_connector *connector)
-{
-	struct vmw_display_unit *du;
-
-	du = vmw_connector_to_du(connector);
-
-	return &du->encoder;
-}
-
-
 int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv)
 {

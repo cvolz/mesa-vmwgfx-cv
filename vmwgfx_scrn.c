@@ -427,7 +427,7 @@ static const struct drm_connector_funcs vmw_sou_connector_funcs = {
 
 static const struct
 drm_connector_helper_funcs vmw_sou_connector_helper_funcs = {
-	.best_encoder = vmw_du_connector_best_encoder,
+	.best_encoder = drm_atomic_helper_best_encoder,
 };
 
 
