@@ -37,15 +37,6 @@
 
 void vmw_du_cleanup(struct vmw_display_unit *du)
 {
-	if (du->cursor.state && du->cursor.state->fb) {
-		/*
-		 * On a layout change, the user mode doesn't call
-		 * drm_mode_cursor_ioctl() to release the cursor, so
-		 * we need to manualy release a reference of it.
-		 */
-		drm_framebuffer_unreference(du->cursor.state->fb);
-	}
-
 	drm_plane_cleanup(&du->primary);
 	drm_plane_cleanup(&du->cursor);
 
