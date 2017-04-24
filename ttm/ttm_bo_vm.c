@@ -101,8 +101,15 @@ out_unlock:
 	return ret;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+static int ttm_bo_vm_fault(struct vm_fault *vmf)
+#else
 static int ttm_bo_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+#endif
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+	struct vm_area_struct *vma = vmf->vma;
+#endif
 	struct ttm_buffer_object *bo = (struct ttm_buffer_object *)
 	    vma->vm_private_data;
 	struct ttm_bo_device *bdev = bo->bdev;
