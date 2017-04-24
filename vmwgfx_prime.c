@@ -114,10 +114,18 @@ const struct dma_buf_ops vmw_prime_dmabuf_ops =  {
 	.map_dma_buf = vmw_prime_map_dma_buf,
 	.unmap_dma_buf = vmw_prime_unmap_dma_buf,
 	.release = NULL,
+#if (LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0))
+	.map = vmw_prime_dmabuf_kmap,
+	.map_atomic = vmw_prime_dmabuf_kmap_atomic,
+	.unmap = vmw_prime_dmabuf_kunmap,
+	.unmap_atomic = vmw_prime_dmabuf_kunmap_atomic,
+#else
 	.kmap = vmw_prime_dmabuf_kmap,
 	.kmap_atomic = vmw_prime_dmabuf_kmap_atomic,
 	.kunmap = vmw_prime_dmabuf_kunmap,
 	.kunmap_atomic = vmw_prime_dmabuf_kunmap_atomic,
+#endif
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0) &&	\
      !defined(DMA_BUF_STANDALONE))
 	.mmap = vmw_prime_dmabuf_mmap,
