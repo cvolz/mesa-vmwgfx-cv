@@ -892,7 +892,11 @@ static inline int ttm_bo_reserve(struct ttm_buffer_object *bo,
 {
 	int ret;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+	WARN_ON(!refcount_read(&bo->kref.refcount));
+#else
 	WARN_ON(!atomic_read(&bo->kref.refcount));
+#endif
 
 	ret = __ttm_bo_reserve(bo, interruptible, no_wait, ticket);
 	if (likely(ret == 0))
@@ -917,7 +921,11 @@ static inline int ttm_bo_reserve_slowpath(struct ttm_buffer_object *bo,
 {
 	int ret = 0;
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+	WARN_ON(!refcount_read(&bo->kref.refcount));
+#else
 	WARN_ON(!atomic_read(&bo->kref.refcount));
+#endif
 
 	if (interruptible)
 		ret = ww_mutex_lock_slow_interruptible(&bo->resv->lock,

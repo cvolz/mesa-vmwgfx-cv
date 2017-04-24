@@ -38,7 +38,11 @@
 
 static inline int __must_check kref_get_unless_zero(struct kref *kref)
 {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+	return refcount_inc_not_zero(&kref->refcount);
+#else
 	return atomic_add_unless(&kref->refcount, 1, 0);
+#endif
 }
 
 /* lockdep_assert_held_once appeared in 3.18 */

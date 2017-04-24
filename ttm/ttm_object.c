@@ -315,8 +315,13 @@ bool ttm_ref_object_exists(struct ttm_object_file *tfile,
 	 * Verify that the ref->obj pointer was actually valid!
 	 */
 	rmb();
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
+	if (refcount_read(&ref->kref.refcount) == 0)
+		goto out_false;
+#else
 	if (unlikely(atomic_read(&ref->kref.refcount) == 0))
 		goto out_false;
+#endif
 
 	rcu_read_unlock();
 	return true;
