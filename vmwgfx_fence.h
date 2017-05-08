@@ -29,8 +29,10 @@
 
 #ifdef VMWGFX_STANDALONE
 #include "core/dma-fence.h"
+#include "core/dma-fence-array.h"
 #else
 #include <linux/dma-fence.h>
+#include <linux/dma-fence-array.h>
 #endif
 
 #define VMW_FENCE_WAIT_TIMEOUT (5*HZ)
@@ -105,6 +107,9 @@ extern int vmw_user_fence_create(struct drm_file *file_priv,
 				 uint32_t sequence,
 				 struct vmw_fence_obj **p_fence,
 				 uint32_t *p_handle);
+
+extern int vmw_wait_dma_fence(struct vmw_fence_manager *fman,
+			      struct dma_fence *fence);
 
 extern void vmw_fence_fifo_up(struct vmw_fence_manager *fman);
 
