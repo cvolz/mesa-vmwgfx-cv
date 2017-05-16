@@ -181,8 +181,11 @@
 		)
 #endif
 
+#if (RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 9))
 #define __ATTR_RW(_name) __ATTR(_name, (S_IWUSR | S_IRUGO),	\
 				_name##_show, _name##_store)
+#endif
+
 #define DEVICE_ATTR_RW(_name)						\
 	struct device_attribute dev_attr_##_name = __ATTR_RW(_name)
 #define DEVICE_ATTR_RO(_name)						\
