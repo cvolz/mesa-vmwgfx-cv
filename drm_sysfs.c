@@ -17,23 +17,74 @@
 #include <linux/gfp.h>
 #include <linux/err.h>
 #include <linux/export.h>
-#include <linux/sysfs.h>
 
 #include "drm_sysfs.h"
-#include "drm_core.h"
 #include "drmP.h"
 #include "drm_internal.h"
 
 #define to_drm_minor(d) dev_get_drvdata(d)
 #define to_drm_connector(d) dev_get_drvdata(d)
 
-static void drm_sysfs_release(struct device *dev);
+static void drm_sysfs_release(struct device *dev); /* for vmwgfx standalone */
 
 
 static struct device_type drm_sysfs_device_minor = {
 	.name = "drm_minor"
 };
 
+#ifndef VMWGFX_STANDALONE
+struct class *drm_class;
+
+static char *drm_devnode(struct device *dev, umode_t *mode)
+{
+	return kasprintf(GFP_KERNEL, "dri/%s", dev_name(dev));
+}
+
+static CLASS_ATTR_STRING(version, S_IRUGO, "drm 1.1.0 20060810");
+
+/**
+ * drm_sysfs_init - initialize sysfs helpers
+ *
+ * This is used to create the DRM class, which is the implicit parent of any
+ * other top-level DRM sysfs objects.
+ *
+ * You must call drm_sysfs_destroy() to release the allocated resources.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+int drm_sysfs_init(void)
+{
+	int err;
+
+	drm_class = class_create(THIS_MODULE, "drm");
+	if (IS_ERR(drm_class))
+		return PTR_ERR(drm_class);
+
+	err = class_create_file(drm_class, &class_attr_version.attr);
+	if (err) {
+		class_destroy(drm_class);
+		drm_class = NULL;
+		return err;
+	}
+
+	drm_class->devnode = drm_devnode;
+	return 0;
+}
+
+/**
+ * drm_sysfs_destroy - destroys DRM class
+ *
+ * Destroy the DRM device class.
+ */
+void drm_sysfs_destroy(void)
+{
+	if (IS_ERR_OR_NULL(drm_class))
+		return;
+	class_remove_file(drm_class, &class_attr_version.attr);
+	class_destroy(drm_class);
+	drm_class = NULL;
+}
+#endif
 
 /*
  * Connector properties
@@ -118,9 +169,9 @@ static ssize_t enabled_show(struct device *device,
 	return snprintf(buf, PAGE_SIZE, enabled ? "enabled\n" : "disabled\n");
 }
 
-static ssize_t edid_show(struct file *file,
-                         struct kobject *kobj, struct bin_attribute *attr,
-			 char *buf, loff_t off, size_t count)
+static ssize_t edid_show(struct file *filp, struct kobject *kobj,
+			 struct bin_attribute *attr, char *buf, loff_t off,
+			 size_t count)
 {
 	struct device *connector_dev = kobj_to_dev(kobj);
 	struct drm_connector *connector = to_drm_connector(connector_dev);
@@ -150,7 +201,6 @@ unlock:
 
 	return ret;
 }
-
 
 static ssize_t modes_show(struct device *device,
 			   struct device_attribute *attr,
@@ -214,7 +264,7 @@ static const struct attribute_group *connector_dev_groups[] = {
  * @connector: connector to add
  *
  * Create a connector device in sysfs, along with its associated connector
- * properties (so far, connection status, dpms, mode list & edid) and
+ * properties (so far, connection status, dpms, mode list and edid) and
  * generate a hotplug event so userspace knows there's a new connector
  * available.
  */
@@ -382,7 +432,7 @@ struct device *drm_sysfs_minor_alloc(struct drm_minor *minor)
 	 * device_initialize() -> device_add() sequence.  And because we are
 	 * not calling device_initialize() ourselves, we now need to add an
 	 * additional reference by calling get_device() so that
-	 * drm_sysfs_minor_free() can reduce the reference count back to 0.
+	 * drm_minor_free() can reduce the reference count back to 0.
 	 */
 	r = drm_class_device_register(kdev);
 	if (r) {
@@ -398,3 +448,30 @@ err_free:
 	return ERR_PTR(r);
 }
 
+#ifndef VMWGFX_STANDALONE /* vmwgfx:  We call into the in-tree DRM version these */
+/**
+ * drm_class_device_register - Register a struct device in the drm class.
+ *
+ * @dev: pointer to struct device to register.
+ *
+ * @dev should have all relevant members pre-filled with the exception
+ * of the class member. In particular, the device_type member must
+ * be set.
+ */
+
+int drm_class_device_register(struct device *dev)
+{
+	if (!drm_class || IS_ERR(drm_class))
+		return -ENOENT;
+
+	dev->class = drm_class;
+	return device_register(dev);
+}
+EXPORT_SYMBOL_GPL(drm_class_device_register);
+
+void drm_class_device_unregister(struct device *dev)
+{
+	return device_unregister(dev);
+}
+EXPORT_SYMBOL_GPL(drm_class_device_unregister);
+#endif

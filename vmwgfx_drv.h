@@ -32,6 +32,7 @@
 #include "drmP.h"
 #include "vmwgfx_drm.h"
 #include "drm_hashtab.h"
+#include "drm_auth.h"
 #include "linux/suspend.h"
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_object.h"

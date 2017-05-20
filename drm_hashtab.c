@@ -72,7 +72,7 @@ void drm_ht_verbose_list(struct drm_open_hash *ht, unsigned long key)
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3,9,0))
 	hlist_for_each_entry(entry, list, h_list, head)
 #else
-        hlist_for_each_entry(entry, h_list, head)
+	hlist_for_each_entry(entry, h_list, head)
 #endif
 		DRM_DEBUG("count %d, key: 0x%08lx\n", count++, entry->key);
 }
@@ -170,7 +170,7 @@ int drm_ht_just_insert_please(struct drm_open_hash *ht, struct drm_hash_item *it
 			      unsigned long add)
 {
 	int ret;
-	unsigned long mask = (1 << bits) - 1;
+	unsigned long mask = (1UL << bits) - 1;
 	unsigned long first, unshifted_key;
 
 	unshifted_key = hash_long(seed, bits);

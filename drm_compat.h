@@ -216,7 +216,8 @@ static inline void hlist_add_behind_rcu(struct hlist_node *n,
 }
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)) &&	\
+	(RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 9))
 enum hdmi_picture_aspect {
 	HDMI_PICTURE_ASPECT_NONE,
 	HDMI_PICTURE_ASPECT_4_3,
@@ -246,6 +247,27 @@ static inline int ida_simple_get(struct ida *ida, unsigned int start,
 
 	return (ret == 0) ? id : ret;
 }
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0))
+extern void *memdup_user_nul(const void __user *, size_t);
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0))
+#define u64_to_user_ptr(x) (		\
+{					\
+	typecheck(u64, x);		\
+	(void __user *)(uintptr_t)x;	\
+}					\
+)
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 12, 0))
+#define lock_acquire_shared_recursive(l, s, t, n, i)	lock_acquire(l, s, t, 2, 1, n, i)
+#endif
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 5, 0))
+#define GLOBAL_ROOT_UID ((kuid_t) 0)
 #endif
 
 #endif

@@ -121,6 +121,14 @@ static inline void *vzalloc(unsigned long size)
 	printk(KERN_DEBUG  "[" DRM_NAME "]:%s " __fmt, __fname, ##__VA_ARGS__)
 #define drm_err(__fmt, ...)						\
 	printk(KERN_ERR  "[" DRM_NAME "] " __fmt, ##__VA_ARGS__)
+
+extern __printf(6, 7)
+void drm_dev_printk(const struct device *dev, const char *level,
+		    unsigned int category, const char *function_name,
+		    const char *prefix, const char *format, ...);
+extern __printf(3, 4)
+void drm_printk(const char *level, unsigned int category,
+		const char *format, ...);
 #endif
 
 /* Ignore the annotation if not present */

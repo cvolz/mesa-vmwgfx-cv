@@ -45,7 +45,7 @@
 # include <asm/agp.h>
 #else
 # ifdef __powerpc__
-#  define PAGE_AGP	__pgprot(_PAGE_KERNEL | _PAGE_NO_CACHE)
+#  define PAGE_AGP	pgprot_noncached_wc(PAGE_KERNEL)
 # else
 #  define PAGE_AGP	PAGE_KERNEL
 # endif
@@ -126,7 +126,7 @@ void drm_legacy_ioremap(struct drm_local_map *map, struct drm_device *dev)
 	if (dev->agp && dev->agp->cant_use_aperture && map->type == _DRM_AGP)
 		map->handle = agp_remap(map->offset, map->size, dev);
 	else
-		map->handle = (void __force *)ioremap(map->offset, map->size);
+		map->handle = ioremap(map->offset, map->size);
 }
 EXPORT_SYMBOL(drm_legacy_ioremap);
 
@@ -135,7 +135,7 @@ void drm_legacy_ioremap_wc(struct drm_local_map *map, struct drm_device *dev)
 	if (dev->agp && dev->agp->cant_use_aperture && map->type == _DRM_AGP)
 		map->handle = agp_remap(map->offset, map->size, dev);
 	else
-		map->handle = (void __force *)ioremap_wc(map->offset, map->size);
+		map->handle = ioremap_wc(map->offset, map->size);
 }
 EXPORT_SYMBOL(drm_legacy_ioremap_wc);
 
@@ -147,7 +147,7 @@ void drm_legacy_ioremapfree(struct drm_local_map *map, struct drm_device *dev)
 	if (dev->agp && dev->agp->cant_use_aperture && map->type == _DRM_AGP)
 		vunmap(map->handle);
 	else
-		iounmap((void __iomem *)map->handle);
+		iounmap(map->handle);
 }
 EXPORT_SYMBOL(drm_legacy_ioremapfree);
 #endif

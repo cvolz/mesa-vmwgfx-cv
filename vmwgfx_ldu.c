@@ -98,7 +98,8 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 		fb = entry->base.crtc.primary->state->fb;
 
 		return vmw_kms_write_svga(dev_priv, w, h, fb->pitches[0],
-					  fb->bits_per_pixel, fb->depth);
+					  fb->format->cpp[0] * 8,
+					  fb->format->depth);
 	}
 
 	if (!list_empty(&lds->active)) {
@@ -106,7 +107,7 @@ static int vmw_ldu_commit_list(struct vmw_private *dev_priv)
 		fb = entry->base.crtc.primary->state->fb;
 
 		vmw_kms_write_svga(dev_priv, fb->width, fb->height, fb->pitches[0],
-				   fb->bits_per_pixel, fb->depth);
+				   fb->format->cpp[0] * 8, fb->format->depth);
 	}
 
 	/* Make sure we always show something. */
@@ -317,7 +318,7 @@ drm_connector_helper_funcs vmw_ldu_connector_helper_funcs = {
  */
 static void
 vmw_ldu_primary_plane_cleanup_fb(struct drm_plane *plane,
-				 const struct drm_plane_state *old_state)
+				 struct drm_plane_state *old_state)
 {
 }
 
@@ -332,7 +333,7 @@ vmw_ldu_primary_plane_cleanup_fb(struct drm_plane *plane,
  */
 static int
 vmw_ldu_primary_plane_prepare_fb(struct drm_plane *plane,
-				 const struct drm_plane_state *new_state)
+				 struct drm_plane_state *new_state)
 {
 	return 0;
 }
@@ -523,9 +524,6 @@ static int vmw_ldu_init(struct vmw_private *dev_priv, unsigned unit)
 	drm_mode_crtc_set_gamma_size(crtc, 256);
 
 	drm_object_attach_property(&connector->base,
-				   dev->mode_config.dirty_info_property,
-				   1);
-	drm_object_attach_property(&connector->base,
 				   dev_priv->hotplug_mode_update_property, 1);
 	drm_object_attach_property(&connector->base,
 				   dev->mode_config.suggested_x_property, 0);
@@ -577,10 +575,6 @@ int vmw_kms_ldu_init_display(struct vmw_private *dev_priv)
 	if (ret != 0)
 		goto err_free;
 
-	ret = drm_mode_create_dirty_info_property(dev);
-	if (ret != 0)
-		goto err_vblank_cleanup;
-
 	vmw_kms_create_implicit_placement_property(dev_priv, true);
 
 	if (dev_priv->capabilities & SVGA_CAP_MULTIMON)
@@ -595,8 +589,6 @@ int vmw_kms_ldu_init_display(struct vmw_private *dev_priv)
 
 	return 0;
 
-err_vblank_cleanup:
-	drm_vblank_cleanup(dev);
 err_free:
 	kfree(dev_priv->ldu_priv);
 	dev_priv->ldu_priv = NULL;

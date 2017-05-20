@@ -26,7 +26,7 @@
 #include "core/sync_file.h"
 #include "core/uapi_sync_file.h"
 
-#include "vmwgfx_compat.h"
+#include "drm_compat.h"
 
 static const struct file_operations sync_file_fops;
 

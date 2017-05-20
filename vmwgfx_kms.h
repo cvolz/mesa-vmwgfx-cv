@@ -251,9 +251,9 @@ struct vmw_display_unit {
 void vmw_du_cleanup(struct vmw_display_unit *du);
 void vmw_du_crtc_save(struct drm_crtc *crtc);
 void vmw_du_crtc_restore(struct drm_crtc *crtc);
-void vmw_du_crtc_gamma_set(struct drm_crtc *crtc,
-			   u16 *r, u16 *g, u16 *b,
-			   uint32_t start, uint32_t size);
+int vmw_du_crtc_gamma_set(struct drm_crtc *crtc,
+			  u16 *r, u16 *g, u16 *b,
+			  uint32_t size);
 int vmw_du_connector_set_property(struct drm_connector *connector,
 				  struct drm_property *property,
 				  uint64_t val);
@@ -309,7 +309,7 @@ vmw_kms_new_framebuffer(struct vmw_private *dev_priv,
 			struct vmw_dma_buffer *dmabuf,
 			struct vmw_surface *surface,
 			bool only_2d,
-			const struct drm_mode_fb_cmd *mode_cmd);
+			const struct drm_mode_fb_cmd2 *mode_cmd);
 int vmw_kms_fbdev_init_data(struct vmw_private *dev_priv,
 			    unsigned unit,
 			    u32 max_width,
@@ -342,9 +342,9 @@ int vmw_du_cursor_plane_atomic_check(struct drm_plane *plane,
 void vmw_du_cursor_plane_atomic_update(struct drm_plane *plane,
 				       struct drm_plane_state *old_state);
 int vmw_du_cursor_plane_prepare_fb(struct drm_plane *plane,
-				   const struct drm_plane_state *new_state);
+				   struct drm_plane_state *new_state);
 void vmw_du_plane_cleanup_fb(struct drm_plane *plane,
-			     const struct drm_plane_state *old_state);
+			     struct drm_plane_state *old_state);
 void vmw_du_plane_reset(struct drm_plane *plane);
 struct drm_plane_state *vmw_du_plane_duplicate_state(struct drm_plane *plane);
 void vmw_du_plane_destroy_state(struct drm_plane *plane,

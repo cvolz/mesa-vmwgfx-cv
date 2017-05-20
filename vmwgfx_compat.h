@@ -612,13 +612,4 @@ static inline int __ttm_compat_shrink(struct shrinker *shrink,
 #define TTM_STANDALONE_DEFINE_COMPAT_SHRINK(__co, __so)
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0))
-#define u64_to_user_ptr(x) (		\
-{					\
-	typecheck(u64, x);		\
-	(void __user *)(uintptr_t)x;	\
-}					\
-)
-#endif
-
 #endif
