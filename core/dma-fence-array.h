@@ -20,7 +20,7 @@
 #ifndef __LINUX_DMA_FENCE_ARRAY_H
 #define __LINUX_DMA_FENCE_ARRAY_H
 
-#include "dma-fence.h"
+#include "core/dma-fence.h"
 
 /**
  * struct dma_fence_array_cb - callback helper for fence array

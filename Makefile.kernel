@@ -9,8 +9,8 @@
 
 .PHONY : $(src)/vmwgfx_version.h
 
-vmwgfx-objs    := ww_mutex.o dma-fence.o reservation.o sync_file.o \
-	        drm_auth.o drm_bufs.o drm_context.o drm_crtc.o \
+vmwgfx-objs    := ww_mutex.o dma-fence.o dma-fence-array.o reservation.o \
+		sync_file.o drm_auth.o drm_bufs.o drm_context.o drm_crtc.o \
 		drm_drv.o drm_fops.o drm_ioctl.o drm_irq.o drm_modes.o \
 		drm_edid.o drm_lock.o drm_memory.o \
 		drm_vm.o drm_sysfs.o drm_hashtab.o drm_mm.o \
