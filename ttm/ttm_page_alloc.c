@@ -61,6 +61,7 @@
 #include <linux/dma-mapping.h>
 
 #include <linux/atomic.h>
+#include <asm/set_memory.h>
 
 #include "ttm/ttm_bo_driver.h"
 #include "ttm/ttm_page_alloc.h"

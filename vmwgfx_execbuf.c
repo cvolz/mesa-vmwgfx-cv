@@ -4002,8 +4002,8 @@ static void *vmw_execbuf_cmdbuf(struct vmw_private *dev_priv,
 	if (IS_ERR(kernel_commands))
 		return kernel_commands;
 
-	ret = __copy_from_user_nocache(kernel_commands, user_commands,
-				       command_size);
+	ret = copy_from_user(kernel_commands, user_commands,
+			     command_size);
 	if (ret) {
 		DRM_ERROR("Failed copying commands.\n");
 		vmw_cmdbuf_header_free(*header);

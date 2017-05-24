@@ -63,6 +63,9 @@
 #include "ttm/ttm_page_alloc.h"
 #endif
 
+#include <asm/set_memory.h>
+
+
 /**
  * Allocates storage for pointers to the pages that back the ttm.
  */

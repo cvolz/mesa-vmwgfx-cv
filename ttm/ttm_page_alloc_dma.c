@@ -72,6 +72,8 @@
 #include "ttm/ttm_page_alloc.h"
 #endif
 
+#include <asm/set_memory.h>
+
 
 #define NUM_PAGES_TO_ALLOC		(PAGE_SIZE/sizeof(struct page *))
 #define SMALL_ALLOCATION		4
