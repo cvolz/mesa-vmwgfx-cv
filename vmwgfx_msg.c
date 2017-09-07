@@ -85,7 +85,7 @@ struct rpc_channel {
  *
  * Returns: 0 on success
  */
-static int vmw_open_channel(struct rpc_channel *channel, unsigned protocol)
+static int vmw_open_channel(struct rpc_channel *channel, unsigned int protocol)
 {
 	unsigned long eax, ebx, ecx, edx, si = 0, di = 0;
 
@@ -417,5 +417,3 @@ int vmw_host_log(const char *log)
 
 	return ret;
 }
-
-

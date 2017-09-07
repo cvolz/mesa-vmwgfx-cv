@@ -319,18 +319,17 @@ int vmw_otables_setup(struct vmw_private *dev_priv)
 	int ret;
 
 	if (dev_priv->has_dx) {
-		*otables = kmalloc(sizeof(dx_tables), GFP_KERNEL);
+		*otables = kmemdup(dx_tables, sizeof(dx_tables), GFP_KERNEL);
 		if (!(*otables))
 			return -ENOMEM;
 
-		memcpy(*otables, dx_tables, sizeof(dx_tables));
 		dev_priv->otable_batch.num_otables = ARRAY_SIZE(dx_tables);
 	} else {
-		*otables = kmalloc(sizeof(pre_dx_tables), GFP_KERNEL);
+		*otables = kmemdup(pre_dx_tables, sizeof(pre_dx_tables),
+				   GFP_KERNEL);
 		if (!(*otables))
 			return -ENOMEM;
 
-		memcpy(*otables, pre_dx_tables, sizeof(pre_dx_tables));
 		dev_priv->otable_batch.num_otables = ARRAY_SIZE(pre_dx_tables);
 	}
 
@@ -471,13 +470,13 @@ out_unreserve:
  * *@addr according to the page table entry size.
  */
 #if (VMW_PPN_SIZE == 8)
-static void vmw_mob_assign_ppn(uint32_t **addr, dma_addr_t val)
+static void vmw_mob_assign_ppn(u32 **addr, dma_addr_t val)
 {
-	*((uint64_t *) *addr) = val >> PAGE_SHIFT;
+	*((u64 *) *addr) = val >> PAGE_SHIFT;
 	*addr += 2;
 }
 #else
-static void vmw_mob_assign_ppn(uint32_t **addr, dma_addr_t val)
+static void vmw_mob_assign_ppn(u32 **addr, dma_addr_t val)
 {
 	*(*addr)++ = val >> PAGE_SHIFT;
 }
@@ -501,7 +500,7 @@ static unsigned long vmw_mob_build_pt(struct vmw_piter *data_iter,
 	unsigned long pt_size = num_data_pages * VMW_PPN_SIZE;
 	unsigned long num_pt_pages = DIV_ROUND_UP(pt_size, PAGE_SIZE);
 	unsigned long pt_page;
-	uint32_t *addr, *save_addr;
+	u32 *addr, *save_addr;
 	unsigned long i;
 	struct page *page;
 

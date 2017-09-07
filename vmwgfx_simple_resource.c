@@ -139,9 +139,10 @@ static void vmw_simple_resource_base_release(struct ttm_base_object **p_base)
  *   0 if success,
  *   Negative error value on error.
  */
-int vmw_simple_resource_create_ioctl(struct drm_device *dev, void *data,
-				     struct drm_file *file_priv,
-				     const struct vmw_simple_resource_func *func)
+int
+vmw_simple_resource_create_ioctl(struct drm_device *dev, void *data,
+				 struct drm_file *file_priv,
+				 const struct vmw_simple_resource_func *func)
 {
 	struct vmw_private *dev_priv = vmw_priv(dev);
 	struct vmw_user_simple_resource *usimple;

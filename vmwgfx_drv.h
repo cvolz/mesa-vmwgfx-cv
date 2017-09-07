@@ -68,9 +68,9 @@
 			VMWGFX_NUM_GB_SURFACE +\
 			VMWGFX_NUM_GB_SCREEN_TARGET)
 
-#define VMW_PL_GMR TTM_PL_PRIV + 0
+#define VMW_PL_GMR (TTM_PL_PRIV + 0)
 #define VMW_PL_FLAG_GMR (TTM_PL_FLAG_PRIV << 0)
-#define VMW_PL_MOB TTM_PL_PRIV + 1
+#define VMW_PL_MOB (TTM_PL_PRIV + 1)
 #define VMW_PL_FLAG_MOB (TTM_PL_FLAG_PRIV << 1)
 
 #define VMW_RES_CONTEXT ttm_driver_type0
@@ -990,10 +990,9 @@ extern int vmw_prime_handle_to_fd(struct drm_device *dev,
 				  uint32_t handle, uint32_t flags,
 				  int *prime_fd);
 
-/**
+/*
  * MemoryOBject management -  vmwgfx_mob.c
  */
-
 struct vmw_mob;
 extern int vmw_mob_bind(struct vmw_private *dev_priv, struct vmw_mob *mob,
 			const struct vmw_sg_table *vsgt,

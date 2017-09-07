@@ -502,7 +502,7 @@ static void vmw_resource_relocations_apply(uint32_t *cb,
 
 	list_for_each_entry(rel, list, head) {
 		u32 *addr = (u32 *)((unsigned long) cb + rel->offset);
-		switch(rel->rel_type) {
+		switch (rel->rel_type) {
 		case vmw_res_rel_normal:
 			*addr = rel->res->id;
 			break;
@@ -3086,7 +3086,7 @@ static int vmw_cmd_dx_genmips(struct vmw_private *dev_priv,
 	} *cmd = container_of(header, typeof(*cmd), header);
 
 	return vmw_view_id_val_add(sw_context, vmw_view_sr,
-			           cmd->body.shaderResourceViewId);
+				   cmd->body.shaderResourceViewId);
 }
 
 /**

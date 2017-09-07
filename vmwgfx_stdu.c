@@ -484,7 +484,8 @@ static void vmw_stdu_crtc_helper_disable(struct drm_crtc *crtc)
 static int vmw_stdu_crtc_page_flip(struct drm_crtc *crtc,
 				   struct drm_framebuffer *new_fb,
 				   struct drm_pending_vblank_event *event,
-				   uint32_t flags)
+				   uint32_t flags,
+				   struct drm_modeset_acquire_ctx *ctx)
 
 {
 	struct vmw_private *dev_priv = vmw_priv(crtc->dev);
@@ -507,7 +508,7 @@ static int vmw_stdu_crtc_page_flip(struct drm_crtc *crtc,
 	 * don't hand it to the helper.
 	 */
 	flags &= ~DRM_MODE_PAGE_FLIP_ASYNC;
-	ret = drm_atomic_helper_page_flip(crtc, new_fb, NULL, flags);
+	ret = drm_atomic_helper_page_flip(crtc, new_fb, NULL, flags, ctx);
 	if (ret) {
 		DRM_ERROR("Page flip error %d.\n", ret);
 		return ret;
@@ -1211,6 +1212,7 @@ vmw_stdu_primary_plane_prepare_fb(struct drm_plane *plane,
 
 		if (vps->surf) {
 			struct drm_vmw_size cur_base_size = vps->surf->base_size;
+
 			if (cur_base_size.width != display_base_size.width ||
 			    cur_base_size.height != display_base_size.height ||
 			    vps->surf->format != content_srf.format) {
@@ -1223,7 +1225,7 @@ vmw_stdu_primary_plane_prepare_fb(struct drm_plane *plane,
 		if (!vps->surf) {
 			ret = vmw_surface_gb_priv_define
 				(crtc->dev,
-				 /* Kernel visisble only */
+				 /* Kernel visible only */
 				 0,
 				 content_srf.flags,
 				 content_srf.format,
@@ -1234,7 +1236,7 @@ vmw_stdu_primary_plane_prepare_fb(struct drm_plane *plane,
 				 display_base_size,
 				 &vps->surf);
 			if (ret != 0) {
-				DRM_ERROR("Couldn't allocate screen target surface.\n");
+				DRM_ERROR("Couldn't allocate STDU surface.\n");
 				return ret;
 			}
 		}

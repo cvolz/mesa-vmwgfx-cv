@@ -39,6 +39,8 @@
 #include "drm_internal.h"
 #include "drm_legacy.h"
 
+#ifndef VMWGFX_STANDALONE
+
 /**
  * Called when "/proc/dri/.../name" is read.
  *
@@ -109,7 +111,6 @@ int drm_clients_info(struct seq_file *m, void *data)
 	return 0;
 }
 
-#ifndef VMWGFX_STANDALONE
 static int drm_gem_one_name_info(int id, void *ptr, void *data)
 {
 	struct drm_gem_object *obj = ptr;

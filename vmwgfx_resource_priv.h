@@ -122,10 +122,11 @@ int vmw_resource_init(struct vmw_private *dev_priv, struct vmw_resource *res,
 		      const struct vmw_res_func *func);
 void vmw_resource_activate(struct vmw_resource *res,
 			   void (*hw_destroy) (struct vmw_resource *));
-int vmw_simple_resource_create_ioctl(struct drm_device *dev,
-				     void *data,
-				     struct drm_file *file_priv,
-				     const struct vmw_simple_resource_func *func);
+int
+vmw_simple_resource_create_ioctl(struct drm_device *dev,
+				 void *data,
+				 struct drm_file *file_priv,
+				 const struct vmw_simple_resource_func *func);
 struct vmw_resource *
 vmw_simple_resource_lookup(struct ttm_object_file *tfile,
 			   uint32_t handle,

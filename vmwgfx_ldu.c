@@ -200,12 +200,6 @@ static int vmw_ldu_add_active(struct vmw_private *vmw_priv,
  */
 static void vmw_ldu_crtc_mode_set_nofb(struct drm_crtc *crtc)
 {
-	struct vmw_private *dev_priv;
-
-	dev_priv = vmw_priv(crtc->dev);
-
-	if (!crtc->state->enable)
-		return;
 }
 
 /**
@@ -241,15 +235,6 @@ static void vmw_ldu_crtc_helper_commit(struct drm_crtc *crtc)
  */
 static void vmw_ldu_crtc_helper_disable(struct drm_crtc *crtc)
 {
-	struct vmw_private *dev_priv;
-
-
-	if (!crtc) {
-		DRM_ERROR("CRTC is NULL\n");
-		return;
-	}
-
-	dev_priv = vmw_priv(crtc->dev);
 }
 
 static const struct drm_crtc_funcs vmw_legacy_crtc_funcs = {

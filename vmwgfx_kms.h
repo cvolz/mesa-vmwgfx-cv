@@ -252,8 +252,9 @@ void vmw_du_cleanup(struct vmw_display_unit *du);
 void vmw_du_crtc_save(struct drm_crtc *crtc);
 void vmw_du_crtc_restore(struct drm_crtc *crtc);
 int vmw_du_crtc_gamma_set(struct drm_crtc *crtc,
-			  u16 *r, u16 *g, u16 *b,
-			  uint32_t size);
+			   u16 *r, u16 *g, u16 *b,
+			   uint32_t size,
+			   struct drm_modeset_acquire_ctx *ctx);
 int vmw_du_connector_set_property(struct drm_connector *connector,
 				  struct drm_property *property,
 				  uint64_t val);
@@ -437,6 +438,7 @@ int vmw_kms_stdu_dma(struct vmw_private *dev_priv,
 		     bool to_surface,
 		     bool interruptible);
 
-int vmw_kms_set_config(struct drm_mode_set *set);
+int vmw_kms_set_config(struct drm_mode_set *set,
+		       struct drm_modeset_acquire_ctx *ctx);
 
 #endif
