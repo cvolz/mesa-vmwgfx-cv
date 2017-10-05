@@ -60,7 +60,7 @@
 
 #include <asm/mman.h>
 #include <asm/pgalloc.h>
-#include <asm/uaccess.h>
+#include <linux/uaccess.h>
 
 #include "drm_compat.h"
 

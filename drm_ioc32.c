@@ -387,7 +387,7 @@ static int compat_drm_addbufs(struct file *file, unsigned int cmd,
 	if (!buf || !access_ok(VERIFY_WRITE, argp, sizeof(*argp)))
 		return -EFAULT;
 
-	if (__copy_in_user(buf, argp, offsetof(drm_buf_desc32_t, agp_start))
+	if (copy_in_user(buf, argp, offsetof(drm_buf_desc32_t, agp_start))
 	    || __get_user(agp_start, &argp->agp_start)
 	    || __put_user(agp_start, &buf->agp_start))
 		return -EFAULT;
@@ -396,7 +396,7 @@ static int compat_drm_addbufs(struct file *file, unsigned int cmd,
 	if (err)
 		return err;
 
-	if (__copy_in_user(argp, buf, offsetof(drm_buf_desc32_t, agp_start))
+	if (copy_in_user(argp, buf, offsetof(drm_buf_desc32_t, agp_start))
 	    || __get_user(agp_start, &buf->agp_start)
 	    || __put_user(agp_start, &argp->agp_start))
 		return -EFAULT;
@@ -472,7 +472,7 @@ static int compat_drm_infobufs(struct file *file, unsigned int cmd,
 		return -EFAULT;
 	if (count >= actual)
 		for (i = 0; i < actual; ++i)
-			if (__copy_in_user(&to[i], &list[i],
+			if (copy_in_user(&to[i], &list[i],
 					   offsetof(struct drm_buf_desc, flags)))
 				return -EFAULT;
 
@@ -533,7 +533,7 @@ static int compat_drm_mapbufs(struct file *file, unsigned int cmd,
 		return -EFAULT;
 	if (count >= actual)
 		for (i = 0; i < actual; ++i)
-			if (__copy_in_user(&list32[i], &list[i],
+			if (copy_in_user(&list32[i], &list[i],
 					   offsetof(struct drm_buf_pub, address))
 			    || __get_user(addr, &list[i].address)
 			    || __put_user((unsigned long)addr,
