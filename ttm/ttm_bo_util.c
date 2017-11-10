@@ -269,6 +269,43 @@ static int ttm_copy_io_page(void *dst, void *src, unsigned long page)
 	return 0;
 }
 
+#ifdef CONFIG_X86
+#define __ttm_kmap_atomic_prot(__page, __prot) kmap_atomic_prot(__page, __prot)
+#define __ttm_kunmap_atomic(__addr) kunmap_atomic(__addr)
+#else
+#define __ttm_kmap_atomic_prot(__page, __prot) vmap(&__page, 1, 0,  __prot)
+#define __ttm_kunmap_atomic(__addr) vunmap(__addr)
+#endif
+
+static void *ttm_kmap_atomic_prot(struct page *page,
+				  pgprot_t prot,
+				  bool aliased)
+{
+	/*
+	 * If the mapping is not aliased anywhere, we can use a cached mapping
+	 * if caller desires.
+	 */
+	if ((!aliased && PageHighMem(page)) ||
+	    pgprot_val(prot) == pgprot_val(PAGE_KERNEL))
+		return kmap_atomic(page);
+	else
+		return __ttm_kmap_atomic_prot(page, prot);
+}
+
+
+static void ttm_kunmap_atomic_prot(struct page *page,
+				   void *addr,
+				   pgprot_t prot,
+				   bool aliased)
+{
+	if ((!aliased && PageHighMem(page)) ||
+	    pgprot_val(prot) != pgprot_val(PAGE_KERNEL)) {
+		kunmap_atomic(addr);
+	} else {
+		__ttm_kunmap_atomic(addr);
+	}
+}
+
 static int ttm_copy_io_ttm_page(struct ttm_tt *ttm, void *src,
 				unsigned long page,
 				pgprot_t prot)
@@ -280,35 +317,21 @@ static int ttm_copy_io_ttm_page(struct ttm_tt *ttm, void *src,
 		return -ENOMEM;
 
 	src = (void *)((unsigned long)src + (page << PAGE_SHIFT));
-
-#ifdef CONFIG_X86
-	dst = kmap_atomic_prot(d, prot);
-#else
-	if (pgprot_val(prot) != pgprot_val(PAGE_KERNEL))
-		dst = vmap(&d, 1, 0, prot);
-	else
-		dst = kmap(d);
-#endif
+	dst = ttm_kmap_atomic_prot(d, prot, true);
 	if (!dst)
 		return -ENOMEM;
 
 	memcpy_fromio(dst, src, PAGE_SIZE);
 
-#ifdef CONFIG_X86
-	kunmap_atomic(dst);
-#else
-	if (pgprot_val(prot) != pgprot_val(PAGE_KERNEL))
-		vunmap(dst);
-	else
-		kunmap(d);
-#endif
+	ttm_kunmap_atomic_prot(d, dst, prot, true);
 
 	return 0;
 }
 
 static int ttm_copy_ttm_io_page(struct ttm_tt *ttm, void *dst,
 				unsigned long page,
-				pgprot_t prot)
+				pgprot_t prot,
+				bool aliased)
 {
 	struct page *s = ttm->pages[page];
 	void *src;
@@ -317,27 +340,13 @@ static int ttm_copy_ttm_io_page(struct ttm_tt *ttm, void *dst,
 		return -ENOMEM;
 
 	dst = (void *)((unsigned long)dst + (page << PAGE_SHIFT));
-#ifdef CONFIG_X86
-	src = kmap_atomic_prot(s, prot);
-#else
-	if (pgprot_val(prot) != pgprot_val(PAGE_KERNEL))
-		src = vmap(&s, 1, 0, prot);
-	else
-		src = kmap(s);
-#endif
+	src = ttm_kmap_atomic_prot(s, prot, true);
 	if (!src)
 		return -ENOMEM;
 
 	memcpy_toio(dst, src, PAGE_SIZE);
 
-#ifdef CONFIG_X86
-	kunmap_atomic(src);
-#else
-	if (pgprot_val(prot) != pgprot_val(PAGE_KERNEL))
-		vunmap(src);
-	else
-		kunmap(s);
-#endif
+	ttm_kunmap_atomic_prot(s, src, prot, aliased);
 
 	return 0;
 }
@@ -410,7 +419,7 @@ int ttm_bo_move_memcpy(struct ttm_buffer_object *bo,
 			pgprot_t prot = ttm_io_prot(old_mem->placement,
 						    PAGE_KERNEL);
 			ret = ttm_copy_ttm_io_page(ttm, new_iomap, page,
-						   prot);
+						   prot, false);
 		} else if (new_iomap == NULL) {
 			pgprot_t prot = ttm_io_prot(new_mem->placement,
 						    PAGE_KERNEL);
