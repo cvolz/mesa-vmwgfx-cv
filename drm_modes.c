@@ -36,7 +36,7 @@
 #include "drmP.h"
 #include "drm_crtc.h"
 
-#ifndef VMWGFX_STANDALONE
+#ifdef CONFIG_VIDEOMODE_HELPERS
 #include <video/of_videomode.h>
 #include <video/videomode.h>
 #endif
