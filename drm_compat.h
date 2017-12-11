@@ -270,4 +270,13 @@ extern void *memdup_user_nul(const void __user *, size_t);
 #define GLOBAL_ROOT_UID ((kuid_t) 0)
 #endif
 
+
+/* Timer interface changed in 4.14 */
+#ifndef from_timer
+#define from_timer(var, callback_timer, timer_fieldname) \
+	container_of(callback_timer, typeof(*var), timer_fieldname)
+#define timer_setup(timer, callback, flags)			\
+	setup_timer((timer), ((void (*)(unsigned long)) callback), ((unsigned long) timer))
+#endif
+
 #endif
