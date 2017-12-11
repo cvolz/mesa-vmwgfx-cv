@@ -248,6 +248,22 @@ void vmw_kms_legacy_hotspot_clear(struct vmw_private *dev_priv)
 	drm_modeset_unlock_all(dev);
 }
 
+void vmw_kms_legacy_hotspot(struct drm_device *dev, struct drm_file *file_priv,
+			    int crtc_id, __s32 *hot_x, __s32 *hot_y)
+{
+	struct drm_crtc *crtc = drm_crtc_find(dev, crtc_id);
+
+	if (!crtc) {
+		*hot_x = 0;
+		*hot_y = 0;
+	} else {
+		struct vmw_display_unit *du = vmw_crtc_to_du(crtc);
+
+		*hot_x = du->hotspot_x;
+		*hot_y = du->hotspot_y;
+	}
+}
+
 void vmw_kms_cursor_post_execbuf(struct vmw_private *dev_priv)
 {
 	struct drm_device *dev = dev_priv->dev;
@@ -266,8 +282,8 @@ void vmw_kms_cursor_post_execbuf(struct vmw_private *dev_priv)
 		vmw_cursor_update_image(dev_priv,
 					du->cursor_surface->snooper.image,
 					64, 64,
-					du->hotspot_x + du->core_hotspot_x,
-					du->hotspot_y + du->core_hotspot_y);
+					du->core_hotspot_x,
+					du->core_hotspot_y);
 	}
 
 	mutex_unlock(&dev->mode_config.mutex);
@@ -382,12 +398,12 @@ vmw_du_cursor_plane_atomic_update(struct drm_plane *plane,
 	int ret = 0;
 
 
-	hotspot_x = du->hotspot_x;
-	hotspot_y = du->hotspot_y;
-
-	if (plane->fb) {
-		hotspot_x += plane->fb->hot_x;
-		hotspot_y += plane->fb->hot_y;
+	if (plane->state->fb) {
+		hotspot_x = plane->state->fb->hot_x;
+		hotspot_y = plane->state->fb->hot_y;
+	} else {
+		hotspot_x = 0;
+		hotspot_y = 0;
 	}
 
 	du->cursor_surface = vps->surf;
