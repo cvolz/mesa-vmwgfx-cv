@@ -776,7 +776,11 @@ int drm_mode_cursor_ioctl(struct drm_device *dev,
 	struct drm_mode_cursor2 new_req;
 
 	memcpy(&new_req, req, sizeof(struct drm_mode_cursor));
-	new_req.hot_x = new_req.hot_y = 0;
+	if (dev->driver->legacy_hotspot)
+		dev->driver->legacy_hotspot(dev, file_priv, req->crtc_id,
+					    &new_req.hot_x, &new_req.hot_y);
+	else
+		new_req.hot_x = new_req.hot_y = 0;
 
 	return drm_mode_cursor_common(dev, &new_req, file_priv);
 }

@@ -499,6 +499,19 @@ struct drm_driver {
 	/* Driver private ops for this object */
 	const struct vm_operations_struct *gem_vm_ops;
 
+	/**
+	 * @legacy_hotspot:
+	 *
+	 * This returns the driver's legacy hotspot coordinates if any.
+	 * Otherwise hot_x and hot_y is set to zero. This functionality
+	 * is deprecated and is only used for backwards compatibility with
+	 * old driver-private hotspot ioctls. For new drivers, set this
+	 * function pointer to null.
+	 */
+	void (*legacy_hotspot)(struct drm_device *dev,
+			       struct drm_file *file_priv, int crtc_id,
+			       __s32 *hot_x, __s32 *hot_y);
+
 	int major;
 	int minor;
 	int patchlevel;
