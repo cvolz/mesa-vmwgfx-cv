@@ -278,28 +278,19 @@ static int ttm_copy_io_page(void *dst, void *src, unsigned long page)
 #endif
 
 static void *ttm_kmap_atomic_prot(struct page *page,
-				  pgprot_t prot,
-				  bool aliased)
+				  pgprot_t prot)
 {
-	/*
-	 * If the mapping is not aliased anywhere, we can use a cached mapping
-	 * if caller desires.
-	 */
-	if ((!aliased && PageHighMem(page)) ||
-	    pgprot_val(prot) == pgprot_val(PAGE_KERNEL))
+	if (pgprot_val(prot) == pgprot_val(PAGE_KERNEL))
 		return kmap_atomic(page);
 	else
 		return __ttm_kmap_atomic_prot(page, prot);
 }
 
 
-static void ttm_kunmap_atomic_prot(struct page *page,
-				   void *addr,
-				   pgprot_t prot,
-				   bool aliased)
+static void ttm_kunmap_atomic_prot(void *addr,
+				   pgprot_t prot)
 {
-	if ((!aliased && PageHighMem(page)) ||
-	    pgprot_val(prot) != pgprot_val(PAGE_KERNEL)) {
+	if (pgprot_val(prot) == pgprot_val(PAGE_KERNEL)) {
 		kunmap_atomic(addr);
 	} else {
 		__ttm_kunmap_atomic(addr);
@@ -317,21 +308,20 @@ static int ttm_copy_io_ttm_page(struct ttm_tt *ttm, void *src,
 		return -ENOMEM;
 
 	src = (void *)((unsigned long)src + (page << PAGE_SHIFT));
-	dst = ttm_kmap_atomic_prot(d, prot, true);
+	dst = ttm_kmap_atomic_prot(d, prot);
 	if (!dst)
 		return -ENOMEM;
 
 	memcpy_fromio(dst, src, PAGE_SIZE);
 
-	ttm_kunmap_atomic_prot(d, dst, prot, true);
+	ttm_kunmap_atomic_prot(dst, prot);
 
 	return 0;
 }
 
 static int ttm_copy_ttm_io_page(struct ttm_tt *ttm, void *dst,
 				unsigned long page,
-				pgprot_t prot,
-				bool aliased)
+				pgprot_t prot)
 {
 	struct page *s = ttm->pages[page];
 	void *src;
@@ -340,13 +330,13 @@ static int ttm_copy_ttm_io_page(struct ttm_tt *ttm, void *dst,
 		return -ENOMEM;
 
 	dst = (void *)((unsigned long)dst + (page << PAGE_SHIFT));
-	src = ttm_kmap_atomic_prot(s, prot, true);
+	src = ttm_kmap_atomic_prot(s, prot);
 	if (!src)
 		return -ENOMEM;
 
 	memcpy_toio(dst, src, PAGE_SIZE);
 
-	ttm_kunmap_atomic_prot(s, src, prot, aliased);
+	ttm_kunmap_atomic_prot(src, prot);
 
 	return 0;
 }
@@ -419,7 +409,7 @@ int ttm_bo_move_memcpy(struct ttm_buffer_object *bo,
 			pgprot_t prot = ttm_io_prot(old_mem->placement,
 						    PAGE_KERNEL);
 			ret = ttm_copy_ttm_io_page(ttm, new_iomap, page,
-						   prot, false);
+						   prot);
 		} else if (new_iomap == NULL) {
 			pgprot_t prot = ttm_io_prot(new_mem->placement,
 						    PAGE_KERNEL);
