@@ -622,4 +622,11 @@ static inline int __ttm_compat_shrink(struct shrinker *shrink,
 #define ktime_get_ts64 ktime_get_ts
 #endif
 
+/*
+ * STACK_FRAME_NON_STANDARD() Appeared in 4.6.
+ */
+#ifndef STACK_FRAME_NON_STANDARD
+#define STACK_FRAME_NON_STANDARD()
+#endif
+
 #endif
