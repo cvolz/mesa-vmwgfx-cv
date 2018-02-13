@@ -45,6 +45,8 @@
 #include <linux/mm.h>
 #include <linux/device.h>
 #include <linux/sched.h>
+#include <linux/file.h>
+#include <linux/printk.h>
 
 #include <asm/pgalloc.h>
 
@@ -216,37 +218,12 @@ static inline void hlist_add_behind_rcu(struct hlist_node *n,
 }
 #endif
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 9, 0)) &&	\
-	(RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 9))
-enum hdmi_picture_aspect {
-	HDMI_PICTURE_ASPECT_NONE,
-	HDMI_PICTURE_ASPECT_4_3,
-	HDMI_PICTURE_ASPECT_16_9,
-};
-#else
-#include <linux/hdmi.h>
-#endif
-
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(3, 1, 0)) &&	\
 	(RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 5))
-static inline int ida_simple_get(struct ida *ida, unsigned int start,
-				 unsigned int end, gfp_t gfp_mask)
-{
-	int ret, id;
-
-	do {
-		if (ida_pre_get(ida, gfp_mask) == 0)
-			return -ENOMEM;
-
-		ret = ida_get_new_above(ida, start, &id);
-		if (ret == 0 && end != 0 && id >= end) {
-			ida_remove(ida, id);
-			return -ENOSPC;
-		}
-	} while (ret == -EAGAIN);
-
-	return (ret == 0) ? id : ret;
-}
+int ida_simple_get(struct ida *ida, unsigned int start,
+		   unsigned int end, gfp_t gfp_mask);
+void ida_simple_remove(struct ida *ida, unsigned int id);
+#define VMW_IDA_SIMPLE
 #endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0))
@@ -277,6 +254,56 @@ extern void *memdup_user_nul(const void __user *, size_t);
 	container_of(callback_timer, typeof(*var), timer_fieldname)
 #define timer_setup(timer, callback, flags)			\
 	setup_timer((timer), ((void (*)(unsigned long)) callback), ((unsigned long) timer))
+#endif
+
+/*
+ * if get_unused_fd_flags() is defined as a macro, it typically evaluates
+ * to alloc_fd(), which is not exported. So redefine the macro to call a
+ * compat function that emulates get_unused_fd_flags() for O_CLOEXEC
+ * only, and warn on other flags.
+ */
+#ifdef get_unused_fd_flags
+#undef get_unused_fd_flags
+#define VMW_COMPAT_FD_FLAGS
+int vmw_get_unused_fd_flags(unsigned int flags);
+#define get_unused_fd_flags(__arg) vmw_get_unused_fd_flags(__arg)
+#else
+#undef VMW_COMPAT_FD_FLAGS
+#endif
+
+/*
+ * If dev_printk is defined as a macro, that macro requires @level to be
+ * given as an immediate string constant rather as a const char pointer.
+ * So redefine the macro to fit the drm_dev_printk usage.
+ */
+#ifdef dev_printk
+#undef dev_printk
+#define dev_printk(level, dev, format, arg...)			\
+  printk("%s%s %s: " format, level, dev_driver_string(dev),	\
+	 dev_name(dev), ## arg)
+#endif
+
+/*
+ * struct va_format was added together with the linux/printk.h header in
+ * 2.6.36. Check whether the header is present; if not, define
+ * struct va_format.
+ */
+#ifndef __KERNEL_PRINTK__
+struct va_format {
+	const char *fmt;
+	va_list *va;
+};
+#endif
+
+/*
+ * The list_first_entry_or_null() macro  was added in 3.11.
+ */
+#ifndef list_first_entry_or_null
+#define list_first_entry_or_null(ptr, type, member) ({ \
+	struct list_head *head__ = (ptr); \
+	struct list_head *pos__ = READ_ONCE(head__->next); \
+	pos__ != head__ ? list_entry(pos__, type, member) : NULL; \
+})
 #endif
 
 #endif

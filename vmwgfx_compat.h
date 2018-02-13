@@ -469,6 +469,7 @@ int dma_buf_fd(struct dma_buf *dmabuf, int flags);
 #define U16_MAX ((u16)~0U)
 #define S32_MAX ((s32)(U32_MAX>>1))
 #define S32_MIN ((s32)(-S32_MAX - 1))
+#define U64_MAX	((u64)~0ULL)
 #endif
 
 /* set_need_resched() disappeared in linux 3.16. Temporary fix. */
@@ -610,6 +611,15 @@ static inline int __ttm_compat_shrink(struct shrinker *shrink,
 #define TTM_STANDALONE_COMPAT_SHRINK ttm_compat_shrink
 #else
 #define TTM_STANDALONE_DEFINE_COMPAT_SHRINK(__co, __so)
+#endif
+
+/*
+ * The timespec64 interface and header appear in 3.17. For the vmwgfx fence use,
+ * revert to the non-future-proof timespec interface for older kernels.
+ */
+#ifndef _LINUX_TIME64_H
+#define timespec64 timespec
+#define ktime_get_ts64 ktime_get_ts
 #endif
 
 #endif
