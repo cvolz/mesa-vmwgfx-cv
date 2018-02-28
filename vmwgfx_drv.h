@@ -944,6 +944,7 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 void vmw_kms_legacy_hotspot_clear(struct vmw_private *dev_priv);
 void vmw_kms_legacy_hotspot(struct drm_device *dev, struct drm_file *file_priv,
 			    int crtc_id, __s32 *hot_x, __s32 *hot_y);
+void vmw_kms_lost_device(struct drm_device *dev);
 
 int vmw_dumb_create(struct drm_file *file_priv,
 		    struct drm_device *dev,
