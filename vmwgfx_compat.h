@@ -626,7 +626,7 @@ static inline int __ttm_compat_shrink(struct shrinker *shrink,
  * STACK_FRAME_NON_STANDARD() Appeared in 4.6.
  */
 #ifndef STACK_FRAME_NON_STANDARD
-#define STACK_FRAME_NON_STANDARD()
+#define STACK_FRAME_NON_STANDARD(_a)
 #endif
 
 #endif

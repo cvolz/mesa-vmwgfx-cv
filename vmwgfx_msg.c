@@ -32,7 +32,7 @@
 #include <asm/hypervisor.h>
 #include "drmP.h"
 #include "vmwgfx_msg.h"
-
+#include "vmwgfx_compat.h"
 
 #define MESSAGE_STATUS_SUCCESS  0x0001
 #define MESSAGE_STATUS_DORECV   0x0002
