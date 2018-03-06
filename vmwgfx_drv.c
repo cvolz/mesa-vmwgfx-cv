@@ -990,7 +990,8 @@ static void vmw_driver_unload(struct drm_device *dev)
 	if (dev_priv->ctx.cmd_bounce)
 		vfree(dev_priv->ctx.cmd_bounce);
 	if (dev_priv->enable_fb) {
-		vmw_fb_off(dev_priv);
+		if (dev_priv->active_master == &dev_priv->fbdev_master)
+			vmw_fb_off(dev_priv);
 		vmw_fb_close(dev_priv);
 		vmw_fifo_resource_dec(dev_priv);
 		vmw_svga_disable(dev_priv);
@@ -1413,28 +1414,23 @@ static int vmwgfx_pm_notifier(struct notifier_block *nb, unsigned long val,
 
 	switch (val) {
 	case PM_HIBERNATION_PREPARE:
-		if (dev_priv->enable_fb)
-			vmw_fb_off(dev_priv);
-		ttm_suspend_lock(&dev_priv->reservation_sem);
-
 		/*
-		 * This empties VRAM and unbinds all GMR bindings.
-		 * Buffer contents is moved to swappable memory.
+		 * Take the reservation sem in write mode, which will make sure
+		 * there are no other processes holding a buffer object
+		 * reservation, meaning we should be able to evict all buffer
+		 * objects if needed.
+		 * Once user-space processes have been frozen, we can release
+		 * the lock again.
 		 */
-		vmw_execbuf_release_pinned_bo(dev_priv);
-		vmw_resource_evict_all(dev_priv);
-		vmw_release_device_early(dev_priv);
-		ttm_bo_swapout_all(&dev_priv->bdev);
-		vmw_fence_fifo_down(dev_priv->fman);
+		ttm_suspend_lock(&dev_priv->reservation_sem);
+		dev_priv->suspend_locked = true;
 		break;
 	case PM_POST_HIBERNATION:
 	case PM_POST_RESTORE:
-		vmw_fence_fifo_up(dev_priv->fman);
-		ttm_suspend_unlock(&dev_priv->reservation_sem);
-		if (dev_priv->enable_fb)
-			vmw_fb_on(dev_priv);
-		break;
-	case PM_RESTORE_PREPARE:
+		if (READ_ONCE(dev_priv->suspend_locked)) {
+			dev_priv->suspend_locked = false;
+			ttm_suspend_unlock(&dev_priv->reservation_sem);
+		}
 		break;
 	default:
 		break;
@@ -1486,7 +1482,32 @@ static int vmw_pm_freeze(struct device *kdev)
 	struct drm_device *dev = pci_get_drvdata(pdev);
 	struct vmw_private *dev_priv = vmw_priv(dev);
 
+	/*
+	 * Unlock for vmw_kms_suspend.
+	 * No user-space processes should be running now.
+	 */
+	ttm_suspend_unlock(&dev_priv->reservation_sem);
+	if (dev_priv->active_master == &dev_priv->fbdev_master) {
+		if (dev_priv->enable_fb)
+			vmw_fb_off(dev_priv);
+	} else {
+		int ret = vmw_kms_suspend(dev_priv->dev);
+
+		if (ret) {
+			ttm_suspend_lock(&dev_priv->reservation_sem);
+			DRM_ERROR("Failed to freeze modesetting.\n");
+			return ret;
+		}
+	}
+
+	ttm_suspend_lock(&dev_priv->reservation_sem);
+	vmw_execbuf_release_pinned_bo(dev_priv);
+	vmw_resource_evict_all(dev_priv);
+	vmw_release_device_early(dev_priv);
+	ttm_bo_swapout_all(&dev_priv->bdev);
+	vmw_fence_fifo_down(dev_priv->fman);
 	dev_priv->suspended = true;
+
 	if (dev_priv->enable_fb)
 		vmw_fifo_resource_dec(dev_priv);
 
@@ -1499,11 +1520,9 @@ static int vmw_pm_freeze(struct device *kdev)
 		return -EBUSY;
 	}
 
-	if (dev_priv->enable_fb)
-		__vmw_svga_disable(dev_priv);
+	__vmw_svga_disable(dev_priv);
 	
 	vmw_release_device_late(dev_priv);
-
 	return 0;
 }
 
@@ -1528,6 +1547,16 @@ static int vmw_pm_restore(struct device *kdev)
 		__vmw_svga_enable(dev_priv);
 
 	dev_priv->suspended = false;
+	vmw_fence_fifo_up(dev_priv->fman);
+	dev_priv->suspend_locked = false;
+	ttm_suspend_unlock(&dev_priv->reservation_sem);
+	if (dev_priv->active_master == &dev_priv->fbdev_master) {
+		if (dev_priv->enable_fb)
+			vmw_fb_on(dev_priv);
+	} else if (dev_priv->suspend_state) {
+		vmw_kms_resume(dev_priv->dev);
+		dev_priv->suspend_state = NULL;
+	}
 
 	return 0;
 }
