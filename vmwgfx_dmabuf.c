@@ -332,6 +332,9 @@ void vmw_bo_pin_reserved(struct vmw_dma_buffer *vbo, bool pin)
  */
 void vmw_dma_buffer_unmap(struct vmw_dma_buffer *vbo)
 {
+	if (vbo->map.bo == NULL)
+		return;
+
 	ttm_bo_kunmap(&vbo->map);
 }
 
