@@ -47,6 +47,7 @@
 #include <linux/sched.h>
 #include <linux/file.h>
 #include <linux/printk.h>
+#include <linux/sysfs.h>
 
 #include <asm/pgalloc.h>
 
@@ -183,7 +184,7 @@
 		)
 #endif
 
-#if (RHEL_VERSION_CODE < RHEL_RELEASE_VERSION(6, 9))
+#ifndef __ATTR_RW
 #define __ATTR_RW(_name) __ATTR(_name, (S_IWUSR | S_IRUGO),	\
 				_name##_show, _name##_store)
 #endif
