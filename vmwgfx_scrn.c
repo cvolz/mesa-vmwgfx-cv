@@ -489,6 +489,8 @@ vmw_sou_primary_plane_prepare_fb(struct drm_plane *plane,
 		return ret;
 	}
 
+	vps->bo_size = size;
+
 	/*
 	 * TTM already thinks the buffer is pinned, but make sure the
 	 * pin_count is upped.
