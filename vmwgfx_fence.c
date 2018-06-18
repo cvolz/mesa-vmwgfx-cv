@@ -193,27 +193,43 @@ static long vmw_fence_wait(struct dma_fence *f, bool intr, signed long timeout)
 	cb.task = current;
 	list_add(&cb.base.node, &f->cb_list);
 
-	while (ret > 0) {
+	for (;;) {
 		__vmw_fences_update(fman);
-		if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &f->flags))
-			break;
 
+		/*
+		 * We can use the barrier free __set_current_state() since
+		 * DMA_FENCE_FLAG_SIGNALED_BIT + wakeup is protected by the
+		 * fence spinlock.
+		 */
 		if (intr)
 			__set_current_state(TASK_INTERRUPTIBLE);
 		else
 			__set_current_state(TASK_UNINTERRUPTIBLE);
+
+		if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &f->flags)) {
+			if (ret == 0 && timeout > 0)
+				ret = 1;
+			break;
+		}
+
+		if (intr && signal_pending(current)) {
+			ret = -ERESTARTSYS;
+			break;
+		}
+
+		if (ret == 0)
+			break;
+
 		spin_unlock(f->lock);
 
 		ret = schedule_timeout(ret);
 
 		spin_lock(f->lock);
-		if (ret > 0 && intr && signal_pending(current))
-			ret = -ERESTARTSYS;
 	}
 
+	__set_current_state(TASK_RUNNING);
 	if (!list_empty(&cb.base.node))
 		list_del(&cb.base.node);
-	__set_current_state(TASK_RUNNING);
 
 out:
 	spin_unlock(f->lock);
