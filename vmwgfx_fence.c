@@ -150,6 +150,24 @@ static bool vmw_fence_enable_signaling(struct dma_fence *f)
 	return true;
 }
 
+static signed long vmw_fence_timeout_error(struct dma_fence *f,
+					   signed long timeout)
+{
+	struct vmw_fence_obj *fence =
+		container_of(f, struct vmw_fence_obj, base);
+	struct vmw_fence_manager *fman = fman_from_fence(fence);
+	struct vmw_private *dev_priv = fman->dev_priv;
+	u32 *fifo_mem = dev_priv->mmio_virt;
+
+	DRM_ERROR("Fence timeout after %ld ticks. "
+		  "Ignoring and restarting wait.\n", timeout);
+	DRM_ERROR("Fence seqno: %lu, Last signaled: %lu\n",
+		  (unsigned long) f->seqno,
+		  (unsigned long) vmw_mmio_read(fifo_mem + SVGA_FIFO_FENCE));
+
+	return timeout;
+};
+
 struct vmwgfx_wait_cb {
 	struct dma_fence_cb base;
 	struct task_struct *task;
@@ -217,8 +235,11 @@ static long vmw_fence_wait(struct dma_fence *f, bool intr, signed long timeout)
 			break;
 		}
 
-		if (ret == 0)
-			break;
+		if (ret == 0) {
+			ret = vmw_fence_timeout_error(f, timeout);
+			if (ret == 0)
+				break;
+		}
 
 		spin_unlock(f->lock);
 
