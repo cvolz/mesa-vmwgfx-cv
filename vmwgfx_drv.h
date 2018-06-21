@@ -1234,6 +1234,11 @@ int vmw_bo_cpu_blit(struct ttm_buffer_object *dst,
 		    u32 w, u32 h,
 		    struct vmw_diff_cpy *diff);
 
+/* Host messaging -vmwgfx_msg.c: */
+int vmw_host_get_guestinfo(const char *guest_info_param,
+			   char *buffer, size_t *length);
+int vmw_host_log(const char *log);
+
 /**
  * Inline helper functions
  */
@@ -1313,11 +1318,6 @@ static inline void vmw_mmio_write(u32 value, u32 *addr)
 {
 	WRITE_ONCE(*addr, value);
 }
-
-/**
- * Add vmw_msg module function
- */
-extern int vmw_host_log(const char *log);
 
 #ifdef VMWGFX_STANDALONE
 extern int force_no_3d;

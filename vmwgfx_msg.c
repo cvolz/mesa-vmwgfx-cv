@@ -31,6 +31,7 @@
 #include <linux/frame.h>
 #include <asm/hypervisor.h>
 #include "drmP.h"
+#include "vmwgfx_drv.h"
 #include "vmwgfx_msg.h"
 #include "vmwgfx_compat.h"
 
