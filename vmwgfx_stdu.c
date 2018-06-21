@@ -503,7 +503,8 @@ static int vmw_stdu_crtc_page_flip(struct drm_crtc *crtc,
 
 	ret = drm_atomic_helper_page_flip(crtc, new_fb, event, flags, ctx);
 	if (ret) {
-		DRM_ERROR("Page flip error %d.\n", ret);
+		if (ret != -EBUSY)
+			DRM_ERROR("Page flip error %d.\n", ret);
 		return ret;
 	}
 
