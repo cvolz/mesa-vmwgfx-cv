@@ -1555,14 +1555,28 @@ static int vmw_kms_check_display_memory(struct drm_device *dev,
 
 	for (i = 0; i < num_rects; i++) {
 		/*
-		 * Currently this check is limiting the topology within max
-		 * texture/screentarget size. This should change in future when
-		 * user-space support multiple fb with topology.
+		 * Currently this check is limiting the topology within
+		 * mode_config->max (which actually is max texture size
+		 * supported by virtual device). This limit is here to address
+		 * Window managers that create a big framebuffer for whole
+		 * topology. May be this should change in future when no such
+		 * user-space exists.
 		 */
 		if (rects[i].x1 < 0 ||  rects[i].y1 < 0 ||
 		    rects[i].x2 > mode_config->max_width ||
 		    rects[i].y2 > mode_config->max_height) {
 			DRM_ERROR("Invalid GUI layout.\n");
+			return -EINVAL;
+		}
+
+		/*
+		 * For STDU only individual screen (screen target) is limited by
+		 * SCREENTARGET_MAX_WIDTH/HEIGHT registers.
+		 */
+		if (dev_priv->active_display_unit == vmw_du_screen_target &&
+		    (drm_rect_width(&rects[i]) > dev_priv->stdu_max_width ||
+		     drm_rect_height(&rects[i]) > dev_priv->stdu_max_height)) {
+			DRM_ERROR("Screen size not supported.\n");
 			return -EINVAL;
 		}
 
