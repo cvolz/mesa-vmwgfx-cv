@@ -42,7 +42,9 @@
  */
 
 static int vmw_prime_map_attach(struct dma_buf *dma_buf,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0))
 				struct device *target_dev,
+#endif
 				struct dma_buf_attachment *attach)
 {
 	return -ENOSYS;
@@ -65,6 +67,7 @@ static void vmw_prime_unmap_dma_buf(struct dma_buf_attachment *attach,
 {
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0))
 static void *vmw_prime_dmabuf_kmap_atomic(struct dma_buf *dma_buf,
 		unsigned long page_num)
 {
@@ -76,6 +79,8 @@ static void vmw_prime_dmabuf_kunmap_atomic(struct dma_buf *dma_buf,
 {
 
 }
+#endif
+
 static void *vmw_prime_dmabuf_kmap(struct dma_buf *dma_buf,
 		unsigned long page_num)
 {
@@ -117,9 +122,11 @@ const struct dma_buf_ops vmw_prime_dmabuf_ops =  {
 #if ((LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)) || \
      (RHEL_VERSION_CODE >= RHEL_RELEASE_VERSION(7, 5)))
 	.map = vmw_prime_dmabuf_kmap,
-	.map_atomic = vmw_prime_dmabuf_kmap_atomic,
 	.unmap = vmw_prime_dmabuf_kunmap,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 19, 0))
+	.map_atomic = vmw_prime_dmabuf_kmap_atomic,
 	.unmap_atomic = vmw_prime_dmabuf_kunmap_atomic,
+#endif
 #else
 	.kmap = vmw_prime_dmabuf_kmap,
 	.kmap_atomic = vmw_prime_dmabuf_kmap_atomic,
