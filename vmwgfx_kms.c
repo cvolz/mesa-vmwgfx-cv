@@ -1548,27 +1548,11 @@ static int vmw_kms_check_display_memory(struct drm_device *dev,
 					struct drm_rect *rects)
 {
 	struct vmw_private *dev_priv = vmw_priv(dev);
-	struct drm_mode_config *mode_config = &dev->mode_config;
 	struct drm_rect bounding_box = {0};
 	u64 total_pixels = 0, pixel_mem, bb_mem;
 	int i;
 
 	for (i = 0; i < num_rects; i++) {
-		/*
-		 * Currently this check is limiting the topology within
-		 * mode_config->max (which actually is max texture size
-		 * supported by virtual device). This limit is here to address
-		 * Window managers that create a big framebuffer for whole
-		 * topology. May be this should change in future when no such
-		 * user-space exists.
-		 */
-		if (rects[i].x1 < 0 ||  rects[i].y1 < 0 ||
-		    rects[i].x2 > mode_config->max_width ||
-		    rects[i].y2 > mode_config->max_height) {
-			DRM_ERROR("Invalid GUI layout.\n");
-			return -EINVAL;
-		}
-
 		/*
 		 * For STDU only individual screen (screen target) is limited by
 		 * SCREENTARGET_MAX_WIDTH/HEIGHT registers.
@@ -2435,6 +2419,7 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 				struct drm_file *file_priv)
 {
 	struct vmw_private *dev_priv = vmw_priv(dev);
+	struct drm_mode_config *mode_config = &dev->mode_config;
 	struct drm_vmw_update_layout_arg *arg =
 		(struct drm_vmw_update_layout_arg *)data;
 	void __user *user_rects;
@@ -2480,6 +2465,21 @@ int vmw_kms_update_layout_ioctl(struct drm_device *dev, void *data,
 		drm_rects[i].y1 = curr_rect.y;
 		drm_rects[i].x2 = curr_rect.x + curr_rect.w;
 		drm_rects[i].y2 = curr_rect.y + curr_rect.h;
+
+		/*
+		 * Currently this check is limiting the topology within
+		 * mode_config->max (which actually is max texture size
+		 * supported by virtual device). This limit is here to address
+		 * window managers that create a big framebuffer for whole
+		 * topology.
+		 */
+		if (drm_rects[i].x1 < 0 ||  drm_rects[i].y1 < 0 ||
+		    drm_rects[i].x2 > mode_config->max_width ||
+		    drm_rects[i].y2 > mode_config->max_height) {
+			DRM_ERROR("Invalid GUI layout.\n");
+			ret = -EINVAL;
+			goto out_free;
+		}
 	}
 
 	ret = vmw_kms_check_display_memory(dev, arg->num_outputs, drm_rects);
