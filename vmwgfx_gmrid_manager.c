@@ -57,7 +57,7 @@ static int vmw_gmrid_man_get_node(struct ttm_mem_type_manager *man,
 
 	id = ida_simple_get(&gman->gmr_ida, 0, gman->max_gmr_ids, GFP_KERNEL);
 	if (id < 0)
-		return id;
+		return (id == -ENOSPC ? 0 : id);
 
 	spin_lock(&gman->lock);
 
